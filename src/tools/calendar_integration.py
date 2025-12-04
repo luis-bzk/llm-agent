@@ -13,6 +13,8 @@ from datetime import datetime, date, time, timedelta
 from typing import Optional
 from pathlib import Path
 
+from ..constants.config_keys import ConfigDefaults
+
 from google.oauth2.credentials import Credentials
 from google.oauth2 import service_account
 from google_auth_oauthlib.flow import InstalledAppFlow
@@ -254,7 +256,7 @@ def calculate_available_slots(
     availability_blocks: list[tuple[time, time]],
     booked_slots: list[tuple[time, time]],
     duration_minutes: int,
-    slot_interval_minutes: int = 15,
+    slot_interval_minutes: int = int(ConfigDefaults.DEFAULT_SLOT_INTERVAL_MINUTES),
 ) -> list[time]:
     """Calculates available slots based on availability blocks and booked slots.
 

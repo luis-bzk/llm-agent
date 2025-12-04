@@ -165,10 +165,31 @@ Esto hace todo lo anterior más:
 
 ### Resetear Todo
 
+Usa el script de limpieza para borrar todo y empezar de nuevo:
+
 ```bash
-rm -f data/mock_ai.db
+# Borrar calendarios de Google + base de datos
+python scripts/local_cleanup.py
+
+# Recrear todo
 python scripts/local_setup.py --calendars
 ```
+
+### Script de Limpieza: `scripts/local_cleanup.py`
+
+Este script elimina los recursos creados por `local_setup.py`:
+
+| Comando                                      | Acción                                      |
+| -------------------------------------------- | ------------------------------------------- |
+| `python scripts/local_cleanup.py`            | Borra calendarios de Google + base de datos |
+| `python scripts/local_cleanup.py --db-only`  | Solo borra la base de datos (mantiene calendarios) |
+| `python scripts/local_cleanup.py --calendars-only` | Solo borra calendarios de Google (mantiene BD) |
+
+**Proceso de limpieza:**
+
+1. Lee los `google_calendar_id` de la base de datos
+2. Elimina cada calendario de Google Calendar
+3. Elimina el archivo `data/mock_ai.db`
 
 ---
 
@@ -297,7 +318,8 @@ mock_ai-agent/
 │   └── mock_ai.db               # SQLite (auto-generado)
 │
 ├── scripts/                     # Scripts de desarrollo
-│   └── local_setup.py           # Setup unificado (seed + calendars)
+│   ├── local_setup.py           # Setup unificado (seed + calendars)
+│   └── local_cleanup.py         # Limpieza (borra calendars + DB)
 │
 ├── src/
 │   ├── agent.py                 # Grafo principal de LangGraph

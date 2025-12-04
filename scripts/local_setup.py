@@ -15,7 +15,7 @@ import argparse
 import json
 import sqlite3
 import uuid
-from datetime import datetime, time
+from datetime import datetime, time, timedelta
 from pathlib import Path
 
 # Paths
@@ -30,74 +30,89 @@ SCOPES = ["https://www.googleapis.com/auth/calendar"]
 # =============================================================================
 # EMPLOYEE CONFIGURATION
 # =============================================================================
+# Working days: MO,TU,WE,TH,FR,SA (RFC 5545 format for RRULE)
+WORKING_DAYS_CENTRO = "MO,TU,WE,TH,FR,SA"  # Lun-Sáb
+WORKING_DAYS_NORTE = "MO,TU,WE,TH,FR"  # Lun-Vie
+
 EMPLOYEES = {
-    # Branch 1: Clínica Centro
+    # Branch 1: Clínica Centro (Lun-Sáb)
     "mario_gomez": {
         "name": "Dr. Mario Gómez",
         "email": "mario.gomez@clinicassaludtotal.com",
         "start_time": time(8, 0),
         "end_time": time(16, 0),
+        "working_days": WORKING_DAYS_CENTRO,
     },
     "laura_rodriguez": {
         "name": "Dra. Laura Rodríguez",
         "email": "laura.rodriguez@clinicassaludtotal.com",
         "start_time": time(10, 0),
         "end_time": time(18, 0),
+        "working_days": WORKING_DAYS_CENTRO,
     },
     "susana_torres": {
         "name": "Dra. Susana Torres",
         "email": "susana.torres@clinicassaludtotal.com",
         "start_time": time(8, 0),
         "end_time": time(14, 0),
+        "working_days": WORKING_DAYS_CENTRO,
     },
     "pedro_morales": {
         "name": "Dr. Pedro Morales",
         "email": "pedro.morales@clinicassaludtotal.com",
         "start_time": time(14, 0),
         "end_time": time(19, 0),
+        "working_days": WORKING_DAYS_CENTRO,
     },
     "roberto_vega": {
         "name": "Dr. Roberto Vega",
         "email": "roberto.vega@clinicassaludtotal.com",
         "start_time": time(9, 0),
         "end_time": time(17, 0),
+        "working_days": WORKING_DAYS_CENTRO,
     },
     "carmen_diaz": {
         "name": "Dra. Carmen Díaz",
         "email": "carmen.diaz@clinicassaludtotal.com",
         "start_time": time(11, 0),
         "end_time": time(18, 0),
+        "working_days": WORKING_DAYS_CENTRO,
     },
-    # Branch 2: Clínica Norte
+    # Branch 2: Clínica Norte (Lun-Vie)
     "maria_lopez": {
         "name": "Dra. María López",
         "email": "maria.lopez@clinicassaludtotal.com",
         "start_time": time(9, 0),
         "end_time": time(17, 0),
+        "working_days": WORKING_DAYS_NORTE,
     },
     "carlos_andrade": {
         "name": "Dr. Carlos Andrade",
         "email": "carlos.andrade@clinicassaludtotal.com",
         "start_time": time(12, 0),
         "end_time": time(18, 0),
+        "working_days": WORKING_DAYS_NORTE,
     },
     "felipe_herrera": {
         "name": "Dr. Felipe Herrera",
         "email": "felipe.herrera@clinicassaludtotal.com",
         "start_time": time(9, 0),
         "end_time": time(14, 0),
+        "working_days": WORKING_DAYS_NORTE,
     },
     "ana_martinez": {
         "name": "Dra. Ana Martínez",
         "email": "ana.martinez@clinicassaludtotal.com",
         "start_time": time(9, 0),
         "end_time": time(16, 0),
+        "working_days": WORKING_DAYS_NORTE,
     },
     "javier_paredes": {
         "name": "Dr. Javier Paredes",
         "email": "javier.paredes@clinicassaludtotal.com",
         "start_time": time(13, 0),
         "end_time": time(18, 0),
+        "working_days": WORKING_DAYS_NORTE,
     },
 }
 
@@ -127,10 +142,12 @@ def time_to_str(t: time) -> str:
 def get_connection() -> sqlite3.Connection:
     """Gets SQLite connection. Creates tables if needed."""
     import sys
+
     sys.path.insert(0, str(SCRIPT_DIR))
 
     # Use SQLiteConnection to ensure tables are created
     from src.repositories.sqlite.connection import SQLiteConnection
+
     SQLiteConnection(str(DB_PATH))  # This calls _init_tables()
 
     conn = sqlite3.connect(DB_PATH)
@@ -175,11 +192,16 @@ def seed_demo_data(cursor: sqlite3.Cursor) -> str:
             "Clínicas Salud Total",
             "Alberto Mendoza",
             "+593999000001",
-            5, 15, 500, 30,
-            "Virsi",
-            "¡Hola! Soy Virsi, el asistente virtual de Clínicas Salud Total. ¿En qué puedo ayudarte hoy?",
+            5,
+            15,
+            500,
+            30,
+            "MockAi",
+            "¡Hola! Soy MockAi, el asistente virtual de Clínicas Salud Total. ¿En qué puedo ayudarte hoy?",
             "+593912345678",
-            now, now, 1,
+            now,
+            now,
+            1,
         ),
     )
     print(f"\n✓ Client: Clínicas Salud Total")
@@ -194,10 +216,18 @@ def seed_demo_data(cursor: sqlite3.Cursor) -> str:
             created_at, updated_at, is_active
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         (
-            branch1_id, client_id,
-            "Clínica Centro", "Av. 10 de Agosto N25-45 y Colón", "Quito",
-            time_to_str(time(8, 0)), time_to_str(time(19, 0)), "1,2,3,4,5,6", "+593999100001",
-            now, now, 1,
+            branch1_id,
+            client_id,
+            "Clínica Centro",
+            "Av. 10 de Agosto N25-45 y Colón",
+            "Quito",
+            time_to_str(time(8, 0)),
+            time_to_str(time(19, 0)),
+            "1,2,3,4,5,6",
+            "+593999100001",
+            now,
+            now,
+            1,
         ),
     )
     print(f"\n✓ Branch 1: Clínica Centro")
@@ -207,7 +237,15 @@ def seed_demo_data(cursor: sqlite3.Cursor) -> str:
     cursor.execute(
         """INSERT OR REPLACE INTO categories (id, branch_id, name, description, display_order, created_at, is_active)
            VALUES (?, ?, ?, ?, ?, ?, ?)""",
-        (cat_general, branch1_id, "Consultas Generales", "Atención médica general", 1, now, 1),
+        (
+            cat_general,
+            branch1_id,
+            "Consultas Generales",
+            "Atención médica general",
+            1,
+            now,
+            1,
+        ),
     )
 
     svc_consulta = generate_id()
@@ -271,8 +309,18 @@ def seed_demo_data(cursor: sqlite3.Cursor) -> str:
                 id, branch_id, name, google_calendar_id, google_account_email,
                 default_start_time, default_end_time, created_at, updated_at, is_active
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-            (cal_id, branch_id, emp["name"], "", emp["email"],
-             time_to_str(emp["start_time"]), time_to_str(emp["end_time"]), now, now, 1),
+            (
+                cal_id,
+                branch_id,
+                emp["name"],
+                "",
+                emp["email"],
+                time_to_str(emp["start_time"]),
+                time_to_str(emp["end_time"]),
+                now,
+                now,
+                1,
+            ),
         )
         return cal_id
 
@@ -312,10 +360,18 @@ def seed_demo_data(cursor: sqlite3.Cursor) -> str:
             created_at, updated_at, is_active
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         (
-            branch2_id, client_id,
-            "Clínica Norte", "Av. de la Prensa N58-120 y Río Coca", "Quito",
-            time_to_str(time(9, 0)), time_to_str(time(18, 0)), "1,2,3,4,5", "+593999100002",
-            now, now, 1,
+            branch2_id,
+            client_id,
+            "Clínica Norte",
+            "Av. de la Prensa N58-120 y Río Coca",
+            "Quito",
+            time_to_str(time(9, 0)),
+            time_to_str(time(18, 0)),
+            "1,2,3,4,5",
+            "+593999100002",
+            now,
+            now,
+            1,
         ),
     )
     print(f"\n✓ Branch 2: Clínica Norte")
@@ -325,7 +381,15 @@ def seed_demo_data(cursor: sqlite3.Cursor) -> str:
     cursor.execute(
         """INSERT OR REPLACE INTO categories (id, branch_id, name, description, display_order, created_at, is_active)
            VALUES (?, ?, ?, ?, ?, ?, ?)""",
-        (cat_dental, branch2_id, "Servicios Dentales", "Atención odontológica", 1, now, 1),
+        (
+            cat_dental,
+            branch2_id,
+            "Servicios Dentales",
+            "Atención odontológica",
+            1,
+            now,
+            1,
+        ),
     )
 
     svc_limpieza = generate_id()
@@ -440,13 +504,15 @@ def setup_google_calendars(cursor: sqlite3.Cursor):
         return
 
     # Get all calendars
-    cursor.execute("""
+    cursor.execute(
+        """
         SELECT c.id, c.name, c.google_calendar_id, b.name as branch_name
         FROM calendars c
         JOIN branches b ON c.branch_id = b.id
         WHERE c.is_active = 1
         ORDER BY b.name, c.name
-    """)
+    """
+    )
     calendars = cursor.fetchall()
 
     created = 0
@@ -459,7 +525,10 @@ def setup_google_calendars(cursor: sqlite3.Cursor):
             print(f"\n🏢 {current_branch}")
 
         # Skip if already configured
-        if cal["google_calendar_id"] and "@group.calendar.google.com" in cal["google_calendar_id"]:
+        if (
+            cal["google_calendar_id"]
+            and "@group.calendar.google.com" in cal["google_calendar_id"]
+        ):
             try:
                 service.calendars().get(calendarId=cal["google_calendar_id"]).execute()
                 print(f"   ⏭️  {cal['name']} - exists")
@@ -481,7 +550,7 @@ def setup_google_calendars(cursor: sqlite3.Cursor):
 
             cursor.execute(
                 "UPDATE calendars SET google_calendar_id = ? WHERE id = ?",
-                (google_id, cal["id"])
+                (google_id, cal["id"]),
             )
 
             print(f"      ✓ {google_id[:40]}...")
@@ -489,6 +558,124 @@ def setup_google_calendars(cursor: sqlite3.Cursor):
 
         except HttpError as e:
             print(f"      ✗ Error: {e}")
+
+    print(f"\n   Created: {created}, Skipped: {skipped}")
+
+    # After creating calendars, create mock_ai events
+    create_mock_ai_events(cursor, service)
+
+
+def create_mock_ai_events(cursor: sqlite3.Cursor, service):
+    """Creates recurring 'mock_ai' availability events for all calendars."""
+    from googleapiclient.errors import HttpError
+
+    print("\n" + "=" * 70)
+    print("CREATING MOCK_AI AVAILABILITY EVENTS")
+    print("=" * 70)
+
+    # Get calendars with their schedule info
+    cursor.execute(
+        """
+        SELECT c.id, c.name, c.google_calendar_id,
+               c.default_start_time, c.default_end_time,
+               b.name as branch_name
+        FROM calendars c
+        JOIN branches b ON c.branch_id = b.id
+        WHERE c.is_active = 1 AND c.google_calendar_id != ''
+        ORDER BY b.name, c.name
+    """
+    )
+    calendars = cursor.fetchall()
+
+    created = 0
+    skipped = 0
+    current_branch = None
+
+    for cal in calendars:
+        if cal["branch_name"] != current_branch:
+            current_branch = cal["branch_name"]
+            print(f"\n🏢 {current_branch}")
+
+        google_calendar_id = cal["google_calendar_id"]
+        if not google_calendar_id:
+            print(f"   ⏭️  {cal['name']} - no Google Calendar ID")
+            skipped += 1
+            continue
+
+        # Find employee config by matching name
+        employee_config = None
+        for key, emp in EMPLOYEES.items():
+            if emp["name"] == cal["name"]:
+                employee_config = emp
+                break
+
+        if not employee_config:
+            print(f"   ⏭️  {cal['name']} - no employee config found")
+            skipped += 1
+            continue
+
+        # Check if mock_ai event already exists
+        try:
+            events = (
+                service.events()
+                .list(
+                    calendarId=google_calendar_id,
+                    q="mock_ai",
+                    maxResults=1,
+                )
+                .execute()
+            )
+
+            if events.get("items"):
+                print(f"   ⏭️  {cal['name']} - mock_ai event exists")
+                skipped += 1
+                continue
+        except HttpError as e:
+            print(f"   ✗ {cal['name']} - error checking: {e}")
+            continue
+
+        # Create recurring mock_ai event
+        start_time = employee_config["start_time"]
+        end_time = employee_config["end_time"]
+        working_days = employee_config["working_days"]
+
+        # Start from next Monday
+        today = datetime.now().date()
+        days_until_monday = (7 - today.weekday()) % 7
+        if days_until_monday == 0:
+            days_until_monday = 7
+        next_monday = today + timedelta(days=days_until_monday)
+
+        start_datetime = datetime.combine(next_monday, start_time)
+        end_datetime = datetime.combine(next_monday, end_time)
+
+        event_body = {
+            "summary": "mock_ai",
+            "description": f"Disponibilidad de {cal['name']} para citas",
+            "start": {
+                "dateTime": start_datetime.isoformat(),
+                "timeZone": "America/Guayaquil",
+            },
+            "end": {
+                "dateTime": end_datetime.isoformat(),
+                "timeZone": "America/Guayaquil",
+            },
+            "recurrence": [f"RRULE:FREQ=WEEKLY;BYDAY={working_days}"],
+        }
+
+        try:
+            service.events().insert(
+                calendarId=google_calendar_id, body=event_body
+            ).execute()
+
+            days_display = working_days.replace(",", ", ")
+            print(
+                f"   ✓ {cal['name']} - {start_time.strftime('%H:%M')}-{end_time.strftime('%H:%M')} ({days_display})"
+            )
+            created += 1
+
+        except HttpError as e:
+            print(f"   ✗ {cal['name']} - error: {e}")
 
     print(f"\n   Created: {created}, Skipped: {skipped}")
 

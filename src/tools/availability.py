@@ -3,6 +3,7 @@
 from datetime import date, time, datetime, timedelta
 from langchain_core.tools import tool
 from ..container import get_container
+from ..constants.config_keys import ConfigKeys, ConfigDefaults
 from .calendar_integration import (
     get_calendar_client,
     calculate_available_slots,
@@ -113,7 +114,10 @@ def get_available_slots(
     if parsed_date < today:
         return "No puedo agendar en fechas pasadas. Por favor elige una fecha futura."
 
-    max_days = 30
+    max_days = int(container.config.get_value(
+        ConfigKeys.DEFAULT_BOOKING_WINDOW_DAYS,
+        ConfigDefaults.DEFAULT_BOOKING_WINDOW_DAYS
+    ))
     if (parsed_date - today).days > max_days:
         return f"Solo puedo agendar dentro de los próximos {max_days} días."
 

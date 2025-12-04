@@ -14,6 +14,8 @@ from langchain_core.messages import AnyMessage
 from langgraph.graph import add_messages
 from pydantic import BaseModel, Field
 
+from .constants.config_keys import ConfigDefaults
+
 
 def replace_or_add_messages(
     left: Sequence[AnyMessage],
@@ -92,7 +94,7 @@ class ConversationConfig(BaseModel):
     client_id: str = Field(..., description="Client/business ID")
     user_phone: str = Field(..., description="User's WhatsApp number")
     branch_id: Optional[str] = Field(default=None)
-    conversation_timeout_hours: int = Field(default=2)
+    conversation_timeout_hours: int = Field(default=int(ConfigDefaults.CONVERSATION_TIMEOUT_HOURS))
     model_name: Optional[str] = Field(default=None, description="Model override")
 
     class Config:

@@ -875,7 +875,7 @@ response = result["messages"][-1].content
 
 ```
 Usuario: Hola
-mock_ai: ¡Hola! Soy Virsi, el asistente virtual de Clínicas Salud Total.
+mock_ai: ¡Hola! Soy MockAi, el asistente virtual de Clínicas Salud Total.
        Para poder ayudarte, ¿podrías indicarme tu nombre completo y número de cédula?
 
 Usuario: Luis Berrezueta, 0105392435
