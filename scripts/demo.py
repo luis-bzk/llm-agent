@@ -175,7 +175,6 @@ def run_demo():
                 client_id=current_client["id"],
                 user_phone=current_phone,
                 thread_id=thread_id,
-                model_name="gpt-4o-mini",
             )
 
             print(f"\n🤖 mock_ai: {response}")

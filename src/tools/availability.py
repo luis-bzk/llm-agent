@@ -1,10 +1,8 @@
-"""
-Tools para consultar disponibilidad de horarios
-"""
+"""Tools for querying schedule availability."""
 
 from datetime import date, time, datetime, timedelta
 from langchain_core.tools import tool
-from ..db import get_db
+from ..container import get_container
 from .calendar_integration import (
     get_calendar_client,
     calculate_available_slots,
@@ -19,29 +17,27 @@ def _get_available_slots_for_calendar(
     duration_minutes: int,
     use_google: bool = True,
 ) -> list[time]:
-    """
-    Obtiene slots disponibles para un calendario específico.
+    """Gets available slots for a specific calendar.
 
-    IMPORTANTE: Solo devuelve slots si hay eventos "mock_ai" que marquen disponibilidad.
-    Si no hay eventos "mock_ai" para esa fecha, el empleado NO está disponible.
+    Only returns slots if there are "mock_ai" events marking availability.
+    If no "mock_ai" events exist for that date, the employee is NOT available.
 
     Args:
-        calendar_id: ID del calendario en BD
-        google_calendar_id: ID del calendario en Google
-        target_date: Fecha a consultar
-        duration_minutes: Duración del servicio
-        use_google: Si usar Google Calendar (default True)
+        calendar_id: Calendar ID in database.
+        google_calendar_id: Calendar ID in Google.
+        target_date: Date to query.
+        duration_minutes: Service duration.
+        use_google: Whether to use Google Calendar (default True).
 
     Returns:
-        Lista de horarios disponibles (vacía si no hay disponibilidad)
+        List of available times (empty if no availability).
     """
-    db = get_db()
+    container = get_container()
 
     if use_google and google_calendar_id:
         try:
             client = get_calendar_client()
 
-            # Obtener bloques de disponibilidad (eventos "mock_ai")
             availability_blocks = client.get_mock_ai_availability(
                 google_calendar_id, target_date
             )
@@ -49,12 +45,10 @@ def _get_available_slots_for_calendar(
             print(f"[DEBUG] Calendar {google_calendar_id} - Date {target_date}")
             print(f"[DEBUG] mock_ai availability blocks: {availability_blocks}")
 
-            # Si NO hay eventos "mock_ai", el empleado NO está disponible ese día
             if not availability_blocks:
                 print(f"[DEBUG] No mock_ai events found - employee not available")
                 return []
 
-            # Obtener slots ocupados (otros eventos)
             booked_slots = client.get_booked_slots(google_calendar_id, target_date)
             print(f"[DEBUG] Booked slots: {booked_slots}")
 
@@ -67,23 +61,18 @@ def _get_available_slots_for_calendar(
             import traceback
 
             traceback.print_exc()
-            # Si falla Google Calendar, NO usar fallback - mejor no mostrar disponibilidad
             return []
 
-    # Si no hay google_calendar_id configurado, usar BD como fallback
-    # Pero solo si hay citas registradas para validar que trabaja ese día
-    calendar = db.get_calendar(calendar_id)
+    calendar = container.calendars.get_by_id(calendar_id)
     if not calendar:
         return []
 
-    # Usar horario por defecto SOLO como referencia
-    availability_blocks = [
-        (calendar["default_start_time"], calendar["default_end_time"])
-    ]
+    availability_blocks = [(calendar.default_start_time, calendar.default_end_time)]
 
-    # Obtener citas existentes de la BD
-    appointments = db.get_appointments_by_calendar_and_date(calendar_id, target_date)
-    booked_slots = [(apt["start_time"], apt["end_time"]) for apt in appointments]
+    appointments = container.appointments.get_by_calendar_and_date(
+        calendar_id, target_date
+    )
+    booked_slots = [(apt.start_time, apt.end_time) for apt in appointments]
 
     return calculate_available_slots(
         availability_blocks, booked_slots, duration_minutes
@@ -94,90 +83,80 @@ def _get_available_slots_for_calendar(
 def get_available_slots(
     branch_id: str, service_name: str, target_date: str, calendar_name: str = None
 ) -> dict | str:
-    """
-    Obtiene los horarios disponibles para un servicio en una fecha específica.
-    Consulta Google Calendar para verificar disponibilidad real.
+    """Gets available times for a service on a specific date.
 
     Args:
-        branch_id: ID de la sucursal
-        service_name: Nombre del servicio (puede ser parcial)
-        target_date: Fecha en formato YYYY-MM-DD
-        calendar_name: Nombre del empleado/calendario (opcional, si no se especifica muestra todos)
+        branch_id: Branch ID.
+        service_name: Service name (can be partial).
+        target_date: Date in YYYY-MM-DD format.
+        calendar_name: Employee/calendar name (optional).
 
     Returns:
-        Diccionario con slots disponibles por calendario
+        Dictionary with available slots per calendar.
     """
-    db = get_db()
+    container = get_container()
 
-    # Buscar servicio
-    service = db.find_service_by_name(branch_id, service_name)
+    service = container.services.find_by_name(branch_id, service_name)
     if not service:
-        all_services = db.get_services_by_branch(branch_id)
+        all_services = container.services.get_by_branch(branch_id)
         if all_services:
-            names = [s["name"] for s in all_services]
+            names = [s.name for s in all_services]
             return f"No encontré el servicio '{service_name}'. Disponibles: {', '.join(names)}"
         return f"No encontré el servicio '{service_name}'."
 
-    # Parsear fecha
     try:
         parsed_date = date.fromisoformat(target_date)
     except ValueError:
         return f"Fecha inválida: {target_date}. Usa formato YYYY-MM-DD."
 
-    # Verificar que la fecha no sea pasada
     today = date.today()
     if parsed_date < today:
         return "No puedo agendar en fechas pasadas. Por favor elige una fecha futura."
 
-    # Verificar límite de días (booking_window)
-    # Esto debería venir del cliente, por ahora usamos un valor por defecto
     max_days = 30
     if (parsed_date - today).days > max_days:
         return f"Solo puedo agendar dentro de los próximos {max_days} días."
 
-    # Obtener calendarios que atienden este servicio
-    calendars = db.get_calendars_for_service(service["id"])
+    calendars = container.calendars.get_for_service(service.id)
 
     if not calendars:
-        return f"No hay empleados asignados para '{service['name']}'."
+        return f"No hay empleados asignados para '{service.name}'."
 
-    # Filtrar por nombre de calendario si se especifica
     if calendar_name:
-        calendars = [c for c in calendars if calendar_name.lower() in c["name"].lower()]
+        calendars = [c for c in calendars if calendar_name.lower() in c.name.lower()]
         if not calendars:
             return (
                 f"No encontré empleado con nombre '{calendar_name}' para este servicio."
             )
 
-    # Obtener disponibilidad de cada calendario
     result = {
-        "service": service["name"],
+        "service": service.name,
         "date": target_date,
-        "duration_minutes": service["duration_minutes"],
-        "price": float(service["price"]),
+        "duration_minutes": service.duration_minutes,
+        "price": float(service.price),
         "availability": [],
     }
 
     for calendar in calendars:
         slots = _get_available_slots_for_calendar(
-            calendar["id"],
-            calendar["google_calendar_id"],
+            calendar.id,
+            calendar.google_calendar_id,
             parsed_date,
-            service["duration_minutes"],
-            use_google=True,  # Intentar usar Google Calendar
+            service.duration_minutes,
+            use_google=True,
         )
 
         if slots:
             result["availability"].append(
                 {
-                    "calendar_id": calendar["id"],
-                    "calendar_name": calendar["name"],
+                    "calendar_id": calendar.id,
+                    "calendar_name": calendar.name,
                     "available_times": [s.strftime("%H:%M") for s in slots],
                 }
             )
 
     if not result["availability"]:
-        return f"No hay horarios disponibles para '{service['name']}' el {target_date}."
+        return f"No hay horarios disponibles para '{service.name}' el {target_date}."
 
     return result
 
@@ -186,47 +165,40 @@ def get_available_slots(
 def get_calendar_availability(
     branch_id: str, calendar_name: str, target_date: str
 ) -> dict | str:
-    """
-    Obtiene la disponibilidad general de un empleado/calendario para una fecha.
-    Útil cuando el usuario quiere saber cuándo trabaja un empleado específico.
+    """Gets general availability of an employee/calendar for a date.
 
     Args:
-        branch_id: ID de la sucursal
-        calendar_name: Nombre del empleado/calendario
-        target_date: Fecha en formato YYYY-MM-DD
+        branch_id: Branch ID.
+        calendar_name: Employee/calendar name.
+        target_date: Date in YYYY-MM-DD format.
 
     Returns:
-        Información de disponibilidad del calendario
+        Calendar availability information.
     """
-    db = get_db()
+    container = get_container()
 
-    # Buscar calendario
-    calendar = db.find_calendar_by_name(branch_id, calendar_name)
+    calendar = container.calendars.find_by_name(branch_id, calendar_name)
     if not calendar:
-        calendars = db.get_calendars_by_branch(branch_id)
+        calendars = container.calendars.get_by_branch(branch_id)
         if calendars:
-            names = [c["name"] for c in calendars]
+            names = [c.name for c in calendars]
             return f"No encontré a '{calendar_name}'. Empleados disponibles: {', '.join(names)}"
         return f"No encontré a '{calendar_name}'."
 
-    # Parsear fecha
     try:
         parsed_date = date.fromisoformat(target_date)
     except ValueError:
         return f"Fecha inválida: {target_date}. Usa formato YYYY-MM-DD."
 
-    # Intentar obtener disponibilidad de Google Calendar
     try:
         client = get_calendar_client()
         availability_blocks = client.get_mock_ai_availability(
-            calendar["google_calendar_id"], parsed_date
+            calendar.google_calendar_id, parsed_date
         )
-        booked_slots = client.get_booked_slots(
-            calendar["google_calendar_id"], parsed_date
-        )
+        booked_slots = client.get_booked_slots(calendar.google_calendar_id, parsed_date)
 
         return {
-            "calendar_name": calendar["name"],
+            "calendar_name": calendar.name,
             "date": target_date,
             "working_hours": [
                 {"from": start.strftime("%H:%M"), "to": end.strftime("%H:%M")}
@@ -237,14 +209,13 @@ def get_calendar_availability(
         }
 
     except Exception as e:
-        # Fallback a horario por defecto
         return {
-            "calendar_name": calendar["name"],
+            "calendar_name": calendar.name,
             "date": target_date,
             "working_hours": [
                 {
-                    "from": calendar["default_start_time"].strftime("%H:%M"),
-                    "to": calendar["default_end_time"].strftime("%H:%M"),
+                    "from": calendar.default_start_time.strftime("%H:%M"),
+                    "to": calendar.default_end_time.strftime("%H:%M"),
                 }
             ],
             "note": "Horario por defecto (no se pudo consultar Google Calendar)",

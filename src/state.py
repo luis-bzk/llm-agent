@@ -1,24 +1,17 @@
 """
-Estado del Agente mock_ai
+State definitions for the mock_ai agent graph.
 
-Define el estado que fluye a través del grafo.
-Incluye mensajes, contexto de cliente, y metadatos de memoria.
+The agent is stateless - the database is the single source of truth.
+Each graph invocation receives a new user message, loads context from DB,
+processes it, saves results to DB, and returns a response.
 
-IMPORTANTE: Este agente es STATELESS. La BD es la única fuente de verdad.
-Cada invocación del grafo:
-1. Recibe SOLO el mensaje nuevo del usuario
-2. Carga contexto/historial de BD
-3. Procesa y guarda resultados en BD
-4. Retorna respuesta
-
-El reducer personalizado `replace_or_add_messages` permite que `load_context`
-REEMPLACE los mensajes (para reconstruir desde BD), mientras otros nodos
-pueden agregar mensajes normalmente.
+The custom reducer `replace_or_add_messages` allows load_context to replace
+messages (reconstructing from DB), while other nodes append normally.
 """
 
 from typing import Annotated, Optional, Sequence, Union
 from langchain_core.messages import AnyMessage
-from langgraph.graph import MessagesState, add_messages
+from langgraph.graph import add_messages
 from pydantic import BaseModel, Field
 
 
@@ -27,13 +20,10 @@ def replace_or_add_messages(
     right: Union[Sequence[AnyMessage], Sequence[tuple[str, str]]],
 ) -> Sequence[AnyMessage]:
     """
-    Reducer personalizado para mensajes.
+    Custom reducer for messages.
 
-    - Si el primer mensaje tiene content "__REPLACE_MESSAGES__": reemplaza todo
-    - De lo contrario: usa add_messages normal (append con deduplicación)
-
-    Esto permite que load_context reemplace los mensajes con los de BD,
-    mientras que assistant y tools agregan mensajes normalmente.
+    If the first message has content "__REPLACE_MESSAGES__", replaces all messages.
+    Otherwise, uses the standard add_messages reducer (append with deduplication).
     """
     if right and len(right) > 0:
         first_msg = right[0]
@@ -47,16 +37,7 @@ def replace_or_add_messages(
 
 
 class InputState(BaseModel):
-    """
-    Estado de entrada para el grafo.
-
-    Contiene solo lo necesario para iniciar una invocación:
-    - messages: El mensaje nuevo del usuario
-    - from_number: Número de WhatsApp del usuario
-    - to_number: Número de WhatsApp del negocio
-
-    IMPORTANTE: Usa el mismo reducer que MockAiState para evitar conflictos.
-    """
+    """Input state for the graph - contains only what's needed to start an invocation."""
 
     messages: Annotated[Sequence[AnyMessage], replace_or_add_messages] = Field(
         default_factory=list
@@ -69,50 +50,36 @@ class InputState(BaseModel):
 
 
 class MockAiState(BaseModel):
-    """
-    Estado completo del agente mock_ai.
+    """Full agent state - populated in load_context with data from DB."""
 
-    Contiene toda la información necesaria para procesar una conversación.
-    Se puebla en load_context con datos de BD.
-    """
-
-    # Mensajes con reducer que permite reemplazo
     messages: Annotated[Sequence[AnyMessage], replace_or_add_messages] = Field(
         default_factory=list
     )
 
-    # Entrada (desde WhatsApp)
     from_number: str = ""
     to_number: str = ""
 
-    # Contexto del cliente (negocio)
     client_id: str = ""
     branch_id: Optional[str] = None
 
-    # Contexto del usuario
     user_phone: str = ""
     user_id: Optional[str] = None
     user_name: Optional[str] = None
     user_cedula: Optional[str] = None
 
-    # Session y conversación
     session_id: Optional[str] = None
     conversation_id: Optional[str] = None
 
-    # Memoria
     conversation_summary: Optional[str] = None
-    user_profile_json: Optional[str] = None
+    memory_profile_json: Optional[str] = None
 
-    # Flujo de agendación
     selected_service_id: Optional[str] = None
     selected_calendar_id: Optional[str] = None
     pending_appointment: Optional[dict] = None
 
-    # Control
     needs_escalation: bool = False
     escalation_reason: Optional[str] = None
 
-    # Tracking de mensajes guardados en BD
     saved_messages_count: int = 0
 
     class Config:
@@ -120,25 +87,13 @@ class MockAiState(BaseModel):
 
 
 class ConversationConfig(BaseModel):
-    """
-    Configuración de la conversación.
-    Se pasa como configurable al invocar el grafo.
-    """
+    """Conversation configuration passed as configurable when invoking the graph."""
 
-    # Identificación
-    client_id: str = Field(..., description="ID del cliente/negocio")
-    user_phone: str = Field(..., description="Número de WhatsApp del usuario")
-
-    # Opcional: sucursal específica (si el cliente tiene solo una)
+    client_id: str = Field(..., description="Client/business ID")
+    user_phone: str = Field(..., description="User's WhatsApp number")
     branch_id: Optional[str] = Field(default=None)
-
-    # Configuración de timeout
-    conversation_timeout_hours: int = Field(
-        default=2, description="Horas para expirar conversación"
-    )
-
-    # Multi-modelo
-    model_name: str = Field(default="gpt-4o-mini", description="Modelo a usar")
+    conversation_timeout_hours: int = Field(default=2)
+    model_name: Optional[str] = Field(default=None, description="Model override")
 
     class Config:
         extra = "allow"

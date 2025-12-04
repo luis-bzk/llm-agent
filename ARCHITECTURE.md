@@ -5,15 +5,16 @@ Documentación técnica detallada del agente de agendación de citas basado en L
 ## Tabla de Contenidos
 
 1. [Principios de Diseño](#principios-de-diseño)
-2. [Diagrama del Grafo](#diagrama-del-grafo)
-3. [Componentes Principales](#componentes-principales)
-4. [Sistema de Estado](#sistema-de-estado)
-5. [Sistema de Memoria](#sistema-de-memoria)
-6. [Persistencia de Mensajes](#persistencia-de-mensajes)
-7. [Tools Disponibles](#tools-disponibles)
-8. [Integración con Google Calendar](#integración-con-google-calendar)
-9. [Flujo de Datos](#flujo-de-datos)
-10. [Esquema de Base de Datos](#esquema-de-base-de-datos)
+2. [Arquitectura General](#arquitectura-general)
+3. [Diagrama del Grafo](#diagrama-del-grafo)
+4. [Repository Pattern](#repository-pattern)
+5. [Sistema de Estado](#sistema-de-estado)
+6. [Sistema de Memoria](#sistema-de-memoria)
+7. [Configuración del Sistema](#configuración-del-sistema)
+8. [Tools Disponibles](#tools-disponibles)
+9. [Integración con Google Calendar](#integración-con-google-calendar)
+10. [Flujo de Datos](#flujo-de-datos)
+11. [Esquema de Base de Datos](#esquema-de-base-de-datos)
 
 ---
 
@@ -50,6 +51,80 @@ Solo se guardan en BD:
 - Tool messages (resultados de herramientas)
 
 Los tool_calls y tool_messages son **efímeros** - solo existen durante la ejecución de una invocación.
+
+### Separation of Concerns
+
+- **Domain**: Entidades puras sin lógica de persistencia
+- **Repositories**: Contratos abstractos para acceso a datos
+- **SQLite Implementation**: Implementación concreta intercambiable
+- **Container**: Dependency Injection para desacoplar componentes
+
+---
+
+## Arquitectura General
+
+### Estructura de Archivos
+
+```
+src/
+├── agent.py              # Grafo principal de LangGraph
+├── state.py              # Definiciones de estado (InputState, MockAiState)
+├── prompts.py            # System prompts del agente
+├── container.py          # Dependency Injection Container
+│
+├── domain/               # Entidades del dominio (dataclasses puros)
+│   ├── client.py         # Client
+│   ├── branch.py         # Branch
+│   ├── service.py        # Service, Category
+│   ├── calendar.py       # Calendar
+│   ├── appointment.py    # Appointment
+│   ├── user.py           # User
+│   ├── session.py        # Session
+│   ├── conversation.py   # Conversation, Message
+│   └── config.py         # ConfigKeys, ConfigDefaults
+│
+├── repositories/
+│   ├── interfaces/       # Contratos abstractos (ABC)
+│   │   ├── client_repository.py
+│   │   ├── branch_repository.py
+│   │   ├── service_repository.py
+│   │   ├── calendar_repository.py
+│   │   ├── appointment_repository.py
+│   │   ├── user_repository.py
+│   │   ├── session_repository.py
+│   │   ├── conversation_repository.py
+│   │   └── config_repository.py
+│   │
+│   └── sqlite/           # Implementación SQLite
+│       ├── connection.py # Conexión y creación de tablas
+│       ├── factory.py    # Factory para crear container
+│       ├── client_repository.py
+│       ├── branch_repository.py
+│       ├── service_repository.py
+│       ├── calendar_repository.py
+│       ├── appointment_repository.py
+│       ├── user_repository.py
+│       ├── session_repository.py
+│       ├── conversation_repository.py
+│       └── config_repository.py
+│
+└── tools/                # Herramientas del agente
+    ├── __init__.py       # Exporta todas las tools
+    ├── services.py       # get_services, get_categories, get_service_details
+    ├── availability.py   # get_available_slots
+    ├── appointments.py   # create_appointment, cancel_appointment, etc.
+    ├── user.py           # find_or_create_user, get_user_info
+    └── calendar_integration.py  # Cliente de Google Calendar API
+```
+
+### Archivos Clave
+
+| Archivo        | Responsabilidad                                      |
+| -------------- | ---------------------------------------------------- |
+| `agent.py`     | Definición del grafo, nodos, y lógica de routing     |
+| `state.py`     | Estados tipados con Pydantic y reducer personalizado |
+| `prompts.py`   | System prompt dinámico con contexto del negocio      |
+| `container.py` | Dependency Injection Container                       |
 
 ---
 
@@ -104,11 +179,11 @@ Los tool_calls y tool_messages son **efímeros** - solo existen durante la ejecu
                                  │                  ┌────────────────────────────┐
                                  │                  │    summarize_if_needed     │
                                  │                  │  ────────────────────────  │
-                                 │                  │  • Si >6 mensajes en BD    │
-                                 │                  │  • Crea/actualiza summary  │
-                                 └─────────────────►│  • Guarda en BD            │
-                                         │          └──────────────┬─────────────┘
-                                   (loop)                          │
+                                 │                  │  • Si >N mensajes en BD    │
+                                 └─────────────────►│  • Crea/actualiza summary  │
+                                         │          │  • Guarda en BD            │
+                                   (loop)           └──────────────┬─────────────┘
+                                         │                         │
                                          │                         ▼
                                          │          ┌────────────────────────────┐
                                          │          │            END             │
@@ -131,42 +206,118 @@ START → load_context → assistant ──┬─→ [tools → assistant]* ─�
 
 ---
 
-## Componentes Principales
+## Repository Pattern
 
-### Estructura de Archivos
+### Concepto
+
+El proyecto implementa el **Repository Pattern** para desacoplar la lógica de negocio del acceso a datos.
 
 ```
-src/
-├── agent.py              # Grafo principal de LangGraph
-├── state.py              # Definiciones de estado (InputState, MockAiState)
-├── prompts.py            # System prompts del agente
-│
-├── db/
-│   ├── database.py       # Wrapper SQLite con todas las queries
-│   └── seed.py           # Datos de ejemplo para demo
-│
-├── tools/
-│   ├── __init__.py       # Exporta todas las tools
-│   ├── services.py       # get_services, get_categories, get_service_details
-│   ├── availability.py   # get_available_slots
-│   ├── appointments.py   # create_appointment, cancel_appointment, etc.
-│   ├── user.py           # find_or_create_user, get_user_info
-│   └── calendar_integration.py  # Cliente de Google Calendar API
-│
-└── memory/               # Sistema de memoria (referencia)
-    ├── short_term.py     # Últimos mensajes
-    ├── long_term.py      # Resumen de conversación
-    └── total.py          # Perfil persistente del usuario
+┌─────────────────────────────────────────────────────────────────┐
+│                         Agent / Tools                            │
+│  (Lógica de negocio - no conoce SQLite)                         │
+└─────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼ usa
+┌─────────────────────────────────────────────────────────────────┐
+│                      Container (DI)                              │
+│  container.clients, container.branches, container.services...   │
+└─────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼ implementa
+┌─────────────────────────────────────────────────────────────────┐
+│                   Interfaces (ABC)                               │
+│  IClientRepository, IBranchRepository, IServiceRepository...    │
+└─────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼ implementado por
+┌─────────────────────────────────────────────────────────────────┐
+│               SQLite Implementation                              │
+│  SQLiteClientRepository, SQLiteBranchRepository...              │
+└─────────────────────────────────────────────────────────────────┘
 ```
 
-### Archivos Clave
+### Beneficios
 
-| Archivo       | Responsabilidad                                      |
-| ------------- | ---------------------------------------------------- |
-| `agent.py`    | Definición del grafo, nodos, y lógica de routing     |
-| `state.py`    | Estados tipados con Pydantic y reducer personalizado |
-| `prompts.py`  | System prompt dinámico con contexto del negocio      |
-| `database.py` | Todas las operaciones de BD (singleton)              |
+- **Testeable**: Se pueden inyectar mocks de repositorios
+- **Intercambiable**: Cambiar a Postgres, MongoDB o API sin tocar la lógica
+- **Single Responsibility**: Cada repositorio maneja una entidad
+- **Tipado fuerte**: Las interfaces definen contratos claros
+
+### Container
+
+```python
+# container.py
+class Container:
+    """Dependency Injection Container."""
+
+    def __init__(
+        self,
+        clients: IClientRepository,
+        branches: IBranchRepository,
+        services: IServiceRepository,
+        calendars: ICalendarRepository,
+        appointments: IAppointmentRepository,
+        users: IUserRepository,
+        sessions: ISessionRepository,
+        conversations: IConversationRepository,
+        config: IConfigRepository,
+    ):
+        self.clients = clients
+        self.branches = branches
+        self.services = services
+        self.calendars = calendars
+        self.appointments = appointments
+        self.users = users
+        self.sessions = sessions
+        self.conversations = conversations
+        self.config = config
+
+
+# Singleton global
+_container: Optional[Container] = None
+
+def set_container(container: Container):
+    global _container
+    _container = container
+
+def get_container() -> Container:
+    if _container is None:
+        raise RuntimeError("Container not initialized. Call set_container() first.")
+    return _container
+```
+
+### Factory
+
+```python
+# repositories/sqlite/factory.py
+def create_sqlite_container(db_path: str = None) -> Container:
+    """Creates Container with SQLite implementations."""
+    connection = SQLiteConnection(db_path)
+
+    return Container(
+        clients=SQLiteClientRepository(connection),
+        branches=SQLiteBranchRepository(connection),
+        services=SQLiteServiceRepository(connection),
+        calendars=SQLiteCalendarRepository(connection),
+        appointments=SQLiteAppointmentRepository(connection),
+        users=SQLiteUserRepository(connection),
+        sessions=SQLiteSessionRepository(connection),
+        conversations=SQLiteConversationRepository(connection),
+        config=SQLiteConfigRepository(connection),
+    )
+```
+
+### Uso en el Código
+
+```python
+# En cualquier parte del código
+from src.container import get_container
+
+container = get_container()
+client = container.clients.get_by_whatsapp("+593912345678")
+branches = container.branches.get_by_client(client.id)
+```
 
 ---
 
@@ -210,12 +361,7 @@ class MockAiState(BaseModel):
 
     # Memoria
     conversation_summary: Optional[str]
-    user_profile_json: Optional[str]
-
-    # Flujo
-    selected_service_id: Optional[str]
-    selected_calendar_id: Optional[str]
-    pending_appointment: Optional[dict]
+    memory_profile_json: Optional[str]
 
     # Control
     needs_escalation: bool = False
@@ -245,71 +391,109 @@ def replace_or_add_messages(left, right):
 
 ## Sistema de Memoria
 
-El sistema tiene 3 niveles de memoria, pero actualmente solo se usa el nivel 2 (Long-Term):
+El sistema tiene 3 niveles de memoria:
 
 ### Nivel 1: Short-Term (Implícito)
 
 - **Qué es**: Los mensajes actuales en `state.messages`
-- **Límite**: Últimos 20 mensajes (configurable en `MAX_MESSAGES`)
+- **Límite**: Configurable via `max_messages_in_context` (default: 20)
 - **Implementación**: Automático por el reducer
 
 ### Nivel 2: Long-Term (Activo)
 
 - **Qué es**: Resumen automático de la conversación
-- **Trigger**: Cuando hay más de 6 mensajes en BD
+- **Trigger**: Cuando hay más de `summary_message_threshold` mensajes
 - **Almacenamiento**: Campo `summary` en tabla `conversations`
 - **Uso**: Se incluye en el system prompt
 
 ```python
 # En summarize_if_needed
-if message_count > MAX_MESSAGES_BEFORE_SUMMARY:  # 6
-    # Genera resumen con LLM
+if message_count > settings.summary_threshold:
     new_summary = llm.invoke(SUMMARY_PROMPT)
-    db.update_conversation_summary(conversation_id, new_summary)
+    container.conversations.update_summary(conversation_id, new_summary)
 ```
 
-### Nivel 3: Total Memory (Preparado, no implementado)
+### Nivel 3: Total Memory (Preparado)
 
 - **Qué es**: Perfil persistente del usuario
-- **Almacenamiento**: Campo `memory_profile_key` en tabla `sessions`
-- **Uso futuro**: Recordar preferencias entre conversaciones
+- **Almacenamiento**: Campo `memory_profile` en tabla `sessions`
+- **Uso**: Recordar preferencias entre conversaciones
 
 ---
 
-## Persistencia de Mensajes
+## Configuración del Sistema
 
-### Qué se guarda en BD
+### AgentSettings
 
-| Tipo                   | ¿Se guarda? | Cuándo                   | Campo `role` |
-| ---------------------- | ----------- | ------------------------ | ------------ |
-| HumanMessage           | ✅ Sí       | En `load_context`        | `"human"`    |
-| AIMessage (final)      | ✅ Sí       | En `save_final_response` | `"ai"`       |
-| AIMessage (tool_calls) | ❌ No       | -                        | -            |
-| ToolMessage            | ❌ No       | -                        | -            |
-| SystemMessage          | ❌ No       | -                        | -            |
-
-### Por qué no guardamos tool_calls/tool_messages
-
-1. **Evita errores de pairing**: Los LLMs requieren que cada `tool_call` tenga un `ToolMessage` correspondiente. Reconstruir esto desde BD es propenso a errores.
-
-2. **Son efímeros**: Los tool_calls son decisiones internas del LLM para una invocación específica. El resultado final es lo que importa.
-
-3. **Simplifica la BD**: Menos datos, queries más simples.
-
-4. **El usuario no los ve**: El usuario solo ve mensajes de texto, no la ejecución interna de tools.
-
-### Reconstrucción de Mensajes
+La configuración se carga UNA vez al inicio de cada request:
 
 ```python
-def db_messages_to_langchain(db_messages: list[dict]) -> list[BaseMessage]:
-    """Solo convierte human y ai messages"""
-    result = []
-    for msg in db_messages:
-        if msg["role"] == "human":
-            result.append(HumanMessage(content=msg["content"]))
-        elif msg["role"] == "ai":
-            result.append(AIMessage(content=msg["content"]))
-    return result
+@dataclass
+class AgentSettings:
+    """Runtime settings loaded from system configuration."""
+
+    model_name: str
+    temperature: float
+    max_messages_in_context: int
+    summary_threshold: int
+    conversation_timeout_hours: int
+
+    @classmethod
+    def load(cls) -> "AgentSettings":
+        """Loads settings from system configuration."""
+        container = get_container()
+        config = container.config
+
+        return cls(
+            model_name=config.get_value(ConfigKeys.AI_MODEL, ConfigDefaults.AI_MODEL),
+            temperature=float(config.get_value(...)),
+            max_messages_in_context=int(config.get_value(...)),
+            summary_threshold=int(config.get_value(...)),
+            conversation_timeout_hours=int(config.get_value(...)),
+        )
+```
+
+### Tabla system_config
+
+| Key                          | Default     | Descripción                        |
+| ---------------------------- | ----------- | ---------------------------------- |
+| `ai_model`                   | `gpt-4o-mini` | Modelo de AI a usar               |
+| `ai_temperature`             | `0.7`       | Temperatura del modelo             |
+| `ai_max_tokens`              | `1024`      | Tokens máximos por respuesta       |
+| `summary_message_threshold`  | `10`        | Mensajes antes de crear resumen    |
+| `conversation_timeout_hours` | `2`         | Horas antes de expirar conversación |
+| `max_messages_in_context`    | `20`        | Mensajes máximos en contexto LLM   |
+| `default_booking_window_days`| `30`        | Días hacia adelante para agendar   |
+| `default_slot_interval_minutes` | `15`     | Intervalo entre slots              |
+
+### ConfigKeys y ConfigDefaults
+
+```python
+# domain/config.py
+class ConfigKeys:
+    """Configuration key constants."""
+    AI_MODEL = "ai_model"
+    AI_TEMPERATURE = "ai_temperature"
+    AI_MAX_TOKENS = "ai_max_tokens"
+    SUMMARY_MESSAGE_THRESHOLD = "summary_message_threshold"
+    CONVERSATION_TIMEOUT_HOURS = "conversation_timeout_hours"
+    MAX_MESSAGES_IN_CONTEXT = "max_messages_in_context"
+    DEFAULT_BOOKING_WINDOW_DAYS = "default_booking_window_days"
+    DEFAULT_SLOT_INTERVAL_MINUTES = "default_slot_interval_minutes"
+    MAX_TOOL_RETRIES = "max_tool_retries"
+
+
+class ConfigDefaults:
+    """Default values for configuration."""
+    AI_MODEL = "gpt-4o-mini"
+    AI_TEMPERATURE = "0.7"
+    AI_MAX_TOKENS = "1024"
+    SUMMARY_MESSAGE_THRESHOLD = "10"
+    CONVERSATION_TIMEOUT_HOURS = "2"
+    MAX_MESSAGES_IN_CONTEXT = "20"
+    DEFAULT_BOOKING_WINDOW_DAYS = "30"
+    DEFAULT_SLOT_INTERVAL_MINUTES = "15"
+    MAX_TOOL_RETRIES = "3"
 ```
 
 ---
@@ -359,12 +543,12 @@ La disponibilidad de cada empleado se determina por **eventos llamados "mock_ai"
 │  Calendario: Dr. Mario Gómez                                │
 ├─────────────────────────────────────────────────────────────┤
 │  8:00  ┌─────────────────┐                                  │
-│        │     mock_ai       │  ← Empleado disponible           │
+│        │     mock_ai     │  ← Empleado disponible           │
 │        │   (disponible)  │                                  │
 │  12:00 ├─────────────────┤                                  │
 │        │   Almuerzo      │  ← Bloque ocupado                │
 │  13:00 ├─────────────────┤                                  │
-│        │     mock_ai       │  ← Empleado disponible           │
+│        │     mock_ai     │  ← Empleado disponible           │
 │        │   (disponible)  │                                  │
 │  16:00 └─────────────────┘                                  │
 └─────────────────────────────────────────────────────────────┘
@@ -386,7 +570,7 @@ get_available_slots(branch_id, service, date)
 ┌─────────────────────────────────┐
 │  Google Calendar API            │
 │  ─────────────────────────────  │
-│  • Buscar eventos "mock_ai"       │
+│  • Buscar eventos "mock_ai"     │
 │  • Buscar eventos ocupados      │
 └─────────────────────────────────┘
          │
@@ -394,7 +578,7 @@ get_available_slots(branch_id, service, date)
 ┌─────────────────────────────────┐
 │  Calcular slots disponibles     │
 │  ─────────────────────────────  │
-│  bloques_mock_ai - ocupados       │
+│  bloques_mock_ai - ocupados     │
 │  = slots libres                 │
 └─────────────────────────────────┘
 ```
@@ -408,33 +592,11 @@ Si un calendario **no tiene eventos "mock_ai"** para una fecha:
 - **NO se usa fallback** a horarios por defecto
 
 ```python
-# En availability.py
 availability_blocks = client.get_mock_ai_availability(google_calendar_id, target_date)
 
 if not availability_blocks:
     # Sin eventos mock_ai = no disponible
     return []
-```
-
-### Cliente de Google Calendar
-
-```python
-# calendar_integration.py
-class GoogleCalendarClient:
-    def get_mock_ai_availability(self, calendar_id: str, target_date: date) -> list[tuple]:
-        """Retorna bloques de disponibilidad [(start, end), ...]"""
-        events = service.events().list(
-            calendarId=calendar_id,
-            timeMin=start_datetime,
-            timeMax=end_datetime,
-            q="mock_ai",  # Busca eventos con "mock_ai" en el título
-        ).execute()
-
-        return [(event.start, event.end) for event in events]
-
-    def get_booked_slots(self, calendar_id: str, target_date: date) -> list[tuple]:
-        """Retorna bloques ocupados (citas existentes)"""
-        # Similar, pero sin filtro de "mock_ai"
 ```
 
 ---
@@ -452,14 +614,14 @@ class GoogleCalendarClient:
 │      "from_number": "+593912345678",                                     │
 │      "to_number": "+593998765432"                                        │
 │  }                                                                       │
-│  config = {"configurable": {"client_id": "...", "user_phone": "..."}}    │
+│  config = create_thread_config(client_id="...", user_phone="...")        │
 └──────────────────────────────────────────────────────────────────────────┘
                                     │
                                     ▼
 ┌──────────────────────────────────────────────────────────────────────────┐
 │  2. LOAD_CONTEXT                                                         │
 │  ────────────────────────────────────────────────────────────────────────│
-│  • to_number → client_id (lookup en BD)                                  │
+│  • to_number → client_id (lookup en BD via container.clients)            │
 │  • Carga/crea session para (client_id, from_number)                      │
 │  • Carga/crea conversation activa                                        │
 │  • Recupera mensajes históricos de BD                                    │
@@ -476,6 +638,7 @@ class GoogleCalendarClient:
 │    - Info de sucursales                                                  │
 │    - Summary de conversación (si existe)                                 │
 │    - Datos del usuario (si ya se identificó)                             │
+│  • Usa settings.model_name y settings.temperature                        │
 │  • Invoca LLM: [SystemMessage, ...mensajes...]                           │
 │  • Retorna AIMessage (puede tener tool_calls)                            │
 └──────────────────────────────────────────────────────────────────────────┘
@@ -496,7 +659,7 @@ class GoogleCalendarClient:
                                       │  5. SUMMARIZE_IF_NEEDED            │
                                       │  ──────────────────────────────────│
                                       │  • Cuenta mensajes en BD           │
-                                      │  • Si >6: genera/actualiza summary │
+                                      │  • Si >threshold: genera summary   │
                                       │  • Guarda summary en BD            │
                                       └────────────────────────────────────┘
                                                         │
@@ -523,6 +686,10 @@ class GoogleCalendarClient:
 ### Diagrama ER Simplificado
 
 ```
+┌───────────────┐
+│ system_config │
+└───────────────┘
+
 ┌─────────────┐     ┌─────────────┐     ┌─────────────┐
 │   clients   │────<│  branches   │────<│ categories  │
 └─────────────┘     └─────────────┘     └──────┬──────┘
@@ -552,17 +719,28 @@ class GoogleCalendarClient:
 
 ### Tablas Principales
 
+#### `system_config`
+
+Configuración global del sistema.
+
+| Campo       | Tipo     | Descripción                      |
+| ----------- | -------- | -------------------------------- |
+| key         | TEXT PK  | Clave de configuración           |
+| value       | TEXT     | Valor                            |
+| description | TEXT     | Descripción (opcional)           |
+| updated_at  | DATETIME | Última actualización             |
+
 #### `clients`
 
 Negocios/empresas que usan el sistema.
 
-| Campo               | Tipo    | Descripción                             |
-| ------------------- | ------- | --------------------------------------- |
-| id                  | TEXT PK | UUID                                    |
-| business_name       | TEXT    | Nombre del negocio                      |
-| whatsapp_number     | TEXT    | Número de WhatsApp del negocio          |
-| bot_name            | TEXT    | Nombre del asistente (default: "mock_ai") |
-| booking_window_days | INT     | Días hacia adelante para agendar        |
+| Campo               | Tipo    | Descripción                    |
+| ------------------- | ------- | ------------------------------ |
+| id                  | TEXT PK | UUID                           |
+| business_name       | TEXT    | Nombre del negocio             |
+| whatsapp_number     | TEXT    | Número de WhatsApp del negocio |
+| bot_name            | TEXT    | Nombre del asistente           |
+| booking_window_days | INT     | Días hacia adelante para agendar |
 
 #### `branches`
 
@@ -587,7 +765,7 @@ Servicios que se pueden agendar.
 | branch_id        | TEXT FK | Referencia a branches   |
 | category_id      | TEXT FK | Referencia a categories |
 | name             | TEXT    | Nombre del servicio     |
-| price            | DECIMAL | Precio                  |
+| price            | REAL    | Precio                  |
 | duration_minutes | INT     | Duración en minutos     |
 
 #### `calendars`
@@ -605,12 +783,13 @@ Empleados/recursos que atienden citas.
 
 Sesiones de WhatsApp (1 por usuario por cliente).
 
-| Campo        | Tipo    | Descripción                   |
-| ------------ | ------- | ----------------------------- |
-| id           | TEXT PK | UUID                          |
-| client_id    | TEXT FK | Referencia a clients          |
-| user_id      | TEXT FK | Referencia a users (nullable) |
-| phone_number | TEXT    | Teléfono del usuario          |
+| Campo          | Tipo    | Descripción                   |
+| -------------- | ------- | ----------------------------- |
+| id             | TEXT PK | UUID                          |
+| client_id      | TEXT FK | Referencia a clients          |
+| user_id        | TEXT FK | Referencia a users (nullable) |
+| phone_number   | TEXT    | Teléfono del usuario          |
+| memory_profile | TEXT    | JSON con perfil del usuario   |
 
 #### `conversations`
 
@@ -635,34 +814,6 @@ Mensajes individuales.
 | role            | TEXT     | "human" o "ai"             |
 | content         | TEXT     | Contenido del mensaje      |
 | created_at      | DATETIME | Timestamp                  |
-
----
-
-## Configuración Multi-Modelo
-
-El agente soporta múltiples proveedores de LLM:
-
-```python
-def get_llm(model_name: str = "gpt-4o-mini"):
-    if model_name.startswith("gpt"):
-        return ChatOpenAI(model=model_name, temperature=0.3)
-    elif model_name.startswith("claude"):
-        return ChatAnthropic(model=model_name, temperature=0.3)
-    elif model_name.startswith("gemini"):
-        return ChatGoogleGenerativeAI(model=model_name, temperature=0.3)
-```
-
-Configurar en la invocación:
-
-```python
-config = {
-    "configurable": {
-        "client_id": "...",
-        "user_phone": "...",
-        "model_name": "gpt-4o-mini"  # o "claude-3-sonnet", "gemini-pro"
-    }
-}
-```
 
 ---
 
@@ -692,15 +843,21 @@ Abre el Studio UI para visualizar el grafo y enviar mensajes de prueba.
 ### Invocación Programática
 
 ```python
+from src.container import set_container, get_container
+from src.repositories.sqlite.factory import create_sqlite_container
 from src.agent import graph, create_thread_config
 from langchain_core.messages import HumanMessage
 
+# Inicializar container
+set_container(create_sqlite_container())
+
+# Crear config con settings
 config = create_thread_config(
     client_id="...",
     user_phone="+593912345678",
-    model_name="gpt-4o-mini"
 )
 
+# Invocar
 result = graph.invoke(
     {"messages": [HumanMessage(content="Hola")]},
     config
@@ -708,4 +865,54 @@ result = graph.invoke(
 
 # Extraer respuesta
 response = result["messages"][-1].content
+```
+
+---
+
+## Ejemplos de Conversación
+
+### Agendar cita simple
+
+```
+Usuario: Hola
+mock_ai: ¡Hola! Soy Virsi, el asistente virtual de Clínicas Salud Total.
+       Para poder ayudarte, ¿podrías indicarme tu nombre completo y número de cédula?
+
+Usuario: Luis Berrezueta, 0105392435
+mock_ai: Gracias Luis. ¿En qué puedo ayudarte hoy?
+
+Usuario: Necesito una cita
+mock_ai: Contamos con 2 sucursales:
+       1. Clínica Centro (Av. 10 de Agosto) - Medicina General, Pediatría, Cardiología
+       2. Clínica Norte (Av. de la Prensa) - Servicios Dentales, Dermatología
+       ¿En cuál te gustaría atenderte?
+
+Usuario: Centro
+mock_ai: En Clínica Centro tenemos:
+       - Consultas Generales
+       - Pediatría
+       - Cardiología
+       ¿Qué tipo de servicio necesitas?
+
+Usuario: Consulta general
+mock_ai: Para Consulta General ($20, 30 min) tenemos disponibles:
+       - Dr. Mario Gómez (8:00-16:00)
+       - Dra. Laura Rodríguez (10:00-18:00)
+       ¿Tienes preferencia de doctor o te muestro disponibilidad?
+
+Usuario: Disponibilidad para mañana
+mock_ai: Disponibilidad para mañana:
+       Dr. Mario Gómez: 8:00, 8:30, 9:00, 9:30, 10:00...
+       Dra. Laura Rodríguez: 10:00, 10:30, 11:00...
+       ¿Cuál prefieres?
+
+Usuario: 10:00 con Mario
+mock_ai: ¡Perfecto! Tu cita ha sido confirmada:
+       📅 Consulta General
+       👨‍⚕️ Dr. Mario Gómez
+       📍 Clínica Centro
+       🕐 Mañana a las 10:00
+       💰 $20
+
+       Te enviaremos un recordatorio. ¿Hay algo más en lo que pueda ayudarte?
 ```

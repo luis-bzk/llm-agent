@@ -1,43 +1,40 @@
-"""
-Tools para consultar servicios y categorías
-"""
+"""Tools for querying services and categories."""
 
 from langchain_core.tools import tool
-from ..db import get_db
+from ..container import get_container
 
 
 @tool
 def get_categories(branch_id: str) -> list[dict] | str:
-    """
-    Obtiene las categorías de servicios disponibles en una sucursal.
+    """Gets service categories available at a branch.
 
     Args:
-        branch_id: ID de la sucursal
+        branch_id: Branch ID.
 
     Returns:
-        Lista de categorías con sus servicios
+        List of categories with their services.
     """
-    db = get_db()
-    categories = db.get_categories_by_branch(branch_id)
+    container = get_container()
+    categories = container.categories.get_by_branch(branch_id)
 
     if not categories:
         return "No se encontraron categorías para esta sucursal."
 
     result = []
     for cat in categories:
-        services = db.get_services_by_category(cat["id"])
+        services = container.services.get_by_category(cat.id)
         result.append(
             {
-                "category_id": cat["id"],
-                "category_name": cat["name"],
-                "description": cat.get("description"),
+                "category_id": cat.id,
+                "category_name": cat.name,
+                "description": cat.description,
                 "services_count": len(services),
                 "services": [
                     {
-                        "service_id": s["id"],
-                        "name": s["name"],
-                        "price": float(s["price"]),
-                        "duration_minutes": s["duration_minutes"],
+                        "service_id": s.id,
+                        "name": s.name,
+                        "price": float(s.price),
+                        "duration_minutes": s.duration_minutes,
                     }
                     for s in services
                 ],
@@ -49,32 +46,30 @@ def get_categories(branch_id: str) -> list[dict] | str:
 
 @tool
 def get_services(branch_id: str) -> list[dict] | str:
-    """
-    Obtiene todos los servicios disponibles en una sucursal con precios y duración.
-    Usa esta herramienta cuando el usuario pregunte qué servicios hay disponibles.
+    """Gets all services available at a branch with prices and duration.
 
     Args:
-        branch_id: ID de la sucursal
+        branch_id: Branch ID.
 
     Returns:
-        Lista de servicios con detalles
+        List of services with details.
     """
-    db = get_db()
-    services = db.get_services_by_branch(branch_id)
+    container = get_container()
+    services = container.services.get_by_branch(branch_id)
 
     if not services:
         return "No se encontraron servicios para esta sucursal."
 
     return [
         {
-            "service_id": s["id"],
-            "name": s["name"],
-            "category": s.get("category_name", "Sin categoría"),
-            "price": float(s["price"]),
-            "price_formatted": f"${float(s['price']):.2f}",
-            "duration_minutes": s["duration_minutes"],
-            "duration_formatted": f"{s['duration_minutes']} min",
-            "description": s.get("description"),
+            "service_id": s.id,
+            "name": s.name,
+            "category": s.category_name or "Sin categoría",
+            "price": float(s.price),
+            "price_formatted": s.price_formatted,
+            "duration_minutes": s.duration_minutes,
+            "duration_formatted": s.duration_formatted,
+            "description": s.description,
         }
         for s in services
     ]
@@ -82,40 +77,34 @@ def get_services(branch_id: str) -> list[dict] | str:
 
 @tool
 def get_service_details(branch_id: str, service_name: str) -> dict | str:
-    """
-    Obtiene los detalles de un servicio específico por nombre.
-    Usa esta herramienta cuando el usuario pregunte por un servicio en particular.
+    """Gets details of a specific service by name.
 
     Args:
-        branch_id: ID de la sucursal
-        service_name: Nombre del servicio (puede ser parcial)
+        branch_id: Branch ID.
+        service_name: Service name (can be partial).
 
     Returns:
-        Detalles del servicio o mensaje de error
+        Service details or error message.
     """
-    db = get_db()
-    service = db.find_service_by_name(branch_id, service_name)
+    container = get_container()
+    service = container.services.find_by_name(branch_id, service_name)
 
     if not service:
-        # Sugerir servicios disponibles
-        all_services = db.get_services_by_branch(branch_id)
+        all_services = container.services.get_by_branch(branch_id)
         if all_services:
-            names = [s["name"] for s in all_services]
+            names = [s.name for s in all_services]
             return f"No encontré el servicio '{service_name}'. Servicios disponibles: {', '.join(names)}"
         return f"No encontré el servicio '{service_name}'."
 
-    # Obtener calendarios que atienden este servicio
-    calendars = db.get_calendars_for_service(service["id"])
+    calendars = container.calendars.get_for_service(service.id)
 
     return {
-        "service_id": service["id"],
-        "name": service["name"],
-        "description": service.get("description"),
-        "price": float(service["price"]),
-        "price_formatted": f"${float(service['price']):.2f}",
-        "duration_minutes": service["duration_minutes"],
-        "duration_formatted": f"{service['duration_minutes']} min",
-        "available_with": [
-            {"calendar_id": c["id"], "name": c["name"]} for c in calendars
-        ],
+        "service_id": service.id,
+        "name": service.name,
+        "description": service.description,
+        "price": float(service.price),
+        "price_formatted": service.price_formatted,
+        "duration_minutes": service.duration_minutes,
+        "duration_formatted": service.duration_formatted,
+        "available_with": [{"calendar_id": c.id, "name": c.name} for c in calendars],
     }
