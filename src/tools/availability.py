@@ -142,6 +142,12 @@ def get_available_slots(
     }
 
     for calendar in calendars:
+        print(f"\n[AVAIL DEBUG] ========================================")
+        print(f"[AVAIL DEBUG] Processing calendar: {calendar.name}")
+        print(f"[AVAIL DEBUG]   calendar.id: {calendar.id}")
+        print(f"[AVAIL DEBUG]   google_calendar_id: {calendar.google_calendar_id}")
+        print(f"[AVAIL DEBUG]   service.duration_minutes: {service.duration_minutes}")
+
         slots = _get_available_slots_for_calendar(
             calendar.id,
             calendar.google_calendar_id,
@@ -149,6 +155,10 @@ def get_available_slots(
             service.duration_minutes,
             use_google=True,
         )
+
+        print(f"[AVAIL DEBUG] Returned slots count: {len(slots)}")
+        if slots:
+            print(f"[AVAIL DEBUG] First 5 slots: {[s.strftime('%H:%M') for s in slots[:5]]}")
 
         if slots:
             result["availability"].append(

@@ -13,8 +13,6 @@ from datetime import datetime, date, time, timedelta
 from typing import Optional
 from pathlib import Path
 
-from ..constants.config_keys import ConfigDefaults
-
 from google.oauth2.credentials import Credentials
 from google.oauth2 import service_account
 from google_auth_oauthlib.flow import InstalledAppFlow
@@ -256,26 +254,38 @@ def calculate_available_slots(
     availability_blocks: list[tuple[time, time]],
     booked_slots: list[tuple[time, time]],
     duration_minutes: int,
-    slot_interval_minutes: int = int(ConfigDefaults.DEFAULT_SLOT_INTERVAL_MINUTES),
 ) -> list[time]:
     """Calculates available slots based on availability blocks and booked slots.
+
+    Slots are generated at intervals matching the service duration to prevent
+    overlapping appointments. For example, a 40-minute service generates slots
+    at 09:00, 09:40, 10:20, etc.
 
     Args:
         availability_blocks: Blocks where availability exists (from "mock_ai" events).
         booked_slots: Already booked slots.
-        duration_minutes: Service duration.
-        slot_interval_minutes: Interval between slots (default 15 min).
+        duration_minutes: Service duration (also used as slot interval).
 
     Returns:
         List of available start times.
     """
+    print(f"[SLOTS DEBUG] ========================================")
+    print(f"[SLOTS DEBUG] calculate_available_slots called with:")
+    print(f"[SLOTS DEBUG]   availability_blocks: {availability_blocks}")
+    print(f"[SLOTS DEBUG]   booked_slots: {booked_slots}")
+    print(f"[SLOTS DEBUG]   duration_minutes: {duration_minutes}")
+
     available_slots = []
 
     for avail_start, avail_end in availability_blocks:
         avail_start_mins = avail_start.hour * 60 + avail_start.minute
         avail_end_mins = avail_end.hour * 60 + avail_end.minute
 
+        print(f"[SLOTS DEBUG] Processing block: {avail_start} - {avail_end}")
+        print(f"[SLOTS DEBUG]   In minutes: {avail_start_mins} - {avail_end_mins}")
+
         current_mins = avail_start_mins
+        slots_in_block = []
         while current_mins + duration_minutes <= avail_end_mins:
             slot_start = time(current_mins // 60, current_mins % 60)
             slot_end_mins = current_mins + duration_minutes
@@ -295,9 +305,15 @@ def calculate_available_slots(
 
             if is_available:
                 available_slots.append(slot_start)
+                slots_in_block.append(slot_start.strftime("%H:%M"))
 
-            current_mins += slot_interval_minutes
+            # Use service duration as interval to prevent overlapping appointments
+            current_mins += duration_minutes
 
+        print(f"[SLOTS DEBUG]   Generated {len(slots_in_block)} slots: {slots_in_block[:5]}{'...' if len(slots_in_block) > 5 else ''}")
+
+    print(f"[SLOTS DEBUG] Total slots generated: {len(available_slots)}")
+    print(f"[SLOTS DEBUG] ========================================")
     return available_slots
 
 
