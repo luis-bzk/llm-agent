@@ -1,0 +1,19 @@
+{
+  "graphs": {
+    "mock_ai": "src.agent:graph"
+  },
+  "env": ".env",
+  "python_version": "3.11",
+  "dependencies": [
+    "langgraph>=1.0.4",
+    "langchain-openai>=1.1.0",
+    "langchain-anthropic>=1.2.0",
+    "langchain-google-genai>=3.2.0",
+    "langchain-core>=1.1.0",
+    "python-dotenv>=1.2.1",
+    "pydantic>=2.0.0",
+    "google-api-python-client>=2.187.0",
+    "google-auth-httplib2>=0.2.1",
+    "google-auth-oauthlib>=1.2.3"
+  ]
+}

@@ -1,0 +1,20 @@
+# LangGraph y LangChain
+langgraph>=1.0.4
+langgraph-cli[inmem]>=0.1.0
+langchain-openai>=1.1.0
+langchain-anthropic>=1.2.0
+langchain-google-genai>=3.2.0
+langchain-core>=1.1.0
+
+# Utils
+python-dotenv>=1.2.1
+pydantic>=2.0.0
+
+# Google Calendar
+google-api-python-client>=2.187.0
+google-auth-httplib2>=0.2.1
+google-auth-oauthlib>=1.2.3
+
+# Dev
+ipython>=9.7.0
+rich>=14.2.0
