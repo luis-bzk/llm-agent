@@ -17,6 +17,7 @@ from .state import MockAiState, InputState
 from .prompts import get_system_prompt
 from .container import get_container
 from .domain.message import Message
+from .config import logger as log
 from .constants.config_keys import ConfigKeys, ConfigDefaults
 from .tools.services import get_services, get_categories, get_service_details
 from .tools.availability import get_available_slots
@@ -517,12 +518,12 @@ def summarize_if_needed(state, config: RunnableConfig) -> dict:
                 updates["memory_profile_json"] = profile_json
 
             except Exception as e:
-                print(f"Error updating memory_profile: {e}")
+                log.error("agent", "Error updating memory_profile", error=str(e))
 
         return updates
 
     except Exception as e:
-        print(f"Error generating summary: {e}")
+        log.error("agent", "Error generating summary", error=str(e))
         return {}
 
 

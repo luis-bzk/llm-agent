@@ -4,6 +4,8 @@ import uuid
 from datetime import datetime, date, time, timedelta
 from langchain_core.tools import tool
 from ..container import get_container
+from ..config import logger as log
+from ..constants.appointment_types import AppointmentType
 from .calendar_integration import get_calendar_client
 from .availability import _get_available_slots_for_calendar
 
@@ -84,7 +86,12 @@ def create_appointment(
             f"No hay horarios disponibles para {appointment_date} con {calendar_name}."
         )
 
+    # Get client to check appointment type
+    client = container.clients.get_by_whatsapp(user.phone_number)
+    is_virtual = client and client.appointment_type == AppointmentType.VIRTUAL
+
     google_event_id = None
+    google_meet_link = None
     try:
         calendar_client = get_calendar_client()
 
@@ -98,15 +105,20 @@ def create_appointment(
             f"Teléfono: {user.phone_number or 'N/A'}"
         )
 
-        google_event_id = calendar_client.create_appointment_event(
+        google_event_id, google_meet_link = calendar_client.create_appointment_event(
             calendar.google_calendar_id,
             event_summary,
             start_datetime,
             end_datetime,
             event_description,
+            include_meet_link=is_virtual,
         )
+
+        # Add meet link to description if virtual
+        if google_meet_link:
+            event_description += f"\n\nEnlace Google Meet: {google_meet_link}"
     except Exception as e:
-        print(f"Warning: No se pudo crear evento en Google Calendar: {e}")
+        log.warn("appointments", "No se pudo crear evento en Google Calendar", error=str(e))
 
     from ..domain.appointment import Appointment
 
@@ -124,6 +136,7 @@ def create_appointment(
         start_time=apt_time,
         end_time=apt_end_time,
         google_event_id=google_event_id,
+        google_meet_link=google_meet_link,
         status="scheduled",
     )
 
@@ -131,7 +144,7 @@ def create_appointment(
 
     branch = container.branches.get_by_id(branch_id)
 
-    return {
+    result = {
         "success": True,
         "appointment_id": appointment.id,
         "message": "¡Cita confirmada!",
@@ -142,10 +155,21 @@ def create_appointment(
             "time": apt_time.strftime("%H:%M"),
             "duration": f"{duration} minutos",
             "price": f"${float(service.price):.2f}",
-            "location": f"{branch.name} - {branch.address}" if branch else "N/A",
         },
         "reminder": "Te enviaré un recordatorio antes de tu cita.",
     }
+
+    # Add location or meet link based on appointment type
+    if google_meet_link:
+        result["details"]["google_meet_link"] = google_meet_link
+        result["details"]["type"] = "virtual"
+    else:
+        result["details"]["location"] = (
+            f"{branch.name} - {branch.address}" if branch else "N/A"
+        )
+        result["details"]["type"] = "presencial"
+
+    return result
 
 
 @tool
@@ -217,7 +241,7 @@ def cancel_appointment(appointment_id: str, reason: str) -> dict | str:
                 calendar.google_calendar_id, appointment.google_event_id
             )
         except Exception as e:
-            print(f"Warning: No se pudo eliminar evento de Google Calendar: {e}")
+            log.warn("appointments", "No se pudo eliminar evento de Google Calendar", error=str(e))
 
     container.appointments.cancel(appointment_id, reason, "user")
 
@@ -318,7 +342,7 @@ def reschedule_appointment(
                 )
                 event_description = "Cita reagendada via mock_ai"
 
-            new_event_id = client.create_appointment_event(
+            new_event_id, _ = client.create_appointment_event(
                 calendar.google_calendar_id,
                 event_summary,
                 start_datetime,
@@ -326,7 +350,7 @@ def reschedule_appointment(
                 event_description,
             )
         except Exception as e:
-            print(f"Warning: Error actualizando Google Calendar: {e}")
+            log.warn("appointments", "Error actualizando Google Calendar", error=str(e))
             new_event_id = None
 
     container.appointments.reschedule(

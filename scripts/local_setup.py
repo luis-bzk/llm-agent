@@ -183,9 +183,9 @@ def seed_demo_data(cursor: sqlite3.Cursor) -> str:
         """INSERT OR REPLACE INTO clients (
             id, email, business_name, owner_name, phone,
             max_branches, max_calendars, max_appointments_monthly, booking_window_days,
-            bot_name, greeting_message, whatsapp_number,
+            bot_name, greeting_message, whatsapp_number, appointment_type,
             created_at, updated_at, is_active
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         (
             client_id,
             "alberto.mendoza@clinicassaludtotal.com",
@@ -199,6 +199,7 @@ def seed_demo_data(cursor: sqlite3.Cursor) -> str:
             "MockAi",
             "¡Hola! Soy MockAi, el asistente virtual de Clínicas Salud Total. ¿En qué puedo ayudarte hoy?",
             "+593912345678",
+            "presencial",  # appointment_type: presencial or virtual
             now,
             now,
             1,

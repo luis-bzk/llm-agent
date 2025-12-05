@@ -14,6 +14,8 @@ from typing import Optional
 from pathlib import Path
 
 from google.oauth2.credentials import Credentials
+
+from ..config import logger as log
 from google.oauth2 import service_account
 from google_auth_oauthlib.flow import InstalledAppFlow
 from google.auth.transport.requests import Request
@@ -92,8 +94,7 @@ class GoogleCalendarClient:
             start_datetime = datetime.combine(target_date, time(0, 0))
             end_datetime = datetime.combine(target_date, time(23, 59, 59))
 
-            print(f"[GCAL DEBUG] Searching calendar: {calendar_id}")
-            print(f"[GCAL DEBUG] Date range: {start_datetime} to {end_datetime}")
+            log.debug("gcal", "Searching calendar", calendar_id=calendar_id, date_range=f"{start_datetime} to {end_datetime}")
 
             events_result = (
                 self.service.events()
@@ -109,14 +110,10 @@ class GoogleCalendarClient:
             )
 
             mock_ai_events = events_result.get("items", [])
-            print(
-                f"[GCAL DEBUG] Found {len(mock_ai_events)} events with 'mock_ai' query"
-            )
+            log.debug("gcal", f"Found {len(mock_ai_events)} mock_ai events")
 
             for event in mock_ai_events:
-                print(
-                    f"[GCAL DEBUG] Event: '{event.get('summary')}' - Start: {event['start']} - End: {event['end']}"
-                )
+                log.debug("gcal", "Event found", summary=event.get('summary'), start=event['start'], end=event['end'])
 
             availability_blocks = []
             for event in mock_ai_events:
@@ -129,14 +126,12 @@ class GoogleCalendarClient:
                     end_dt = datetime.fromisoformat(end.replace("Z", "+00:00"))
 
                     availability_blocks.append((start_dt.time(), end_dt.time()))
-                    print(
-                        f"[GCAL DEBUG] Added availability block: {start_dt.time()} - {end_dt.time()}"
-                    )
+                    log.debug("gcal", "Added availability block", start=start_dt.time(), end=end_dt.time())
 
             return availability_blocks
 
         except HttpError as e:
-            print(f"[GCAL ERROR] Error accessing Google Calendar: {e}")
+            log.error("gcal", "Error accessing Google Calendar", error=str(e))
             return []
 
     def get_booked_slots(
@@ -189,7 +184,7 @@ class GoogleCalendarClient:
             return booked_slots
 
         except HttpError as e:
-            print(f"Error accessing Google Calendar: {e}")
+            log.error("gcal", "Error getting booked slots", error=str(e))
             return []
 
     def create_appointment_event(
@@ -199,7 +194,8 @@ class GoogleCalendarClient:
         start_datetime: datetime,
         end_datetime: datetime,
         description: str = None,
-    ) -> Optional[str]:
+        include_meet_link: bool = False,
+    ) -> tuple[Optional[str], Optional[str]]:
         """Creates an appointment event in Google Calendar.
 
         Args:
@@ -208,9 +204,10 @@ class GoogleCalendarClient:
             start_datetime: Event start.
             end_datetime: Event end.
             description: Event description.
+            include_meet_link: Whether to create a Google Meet link.
 
         Returns:
-            Created event ID or None if failed.
+            Tuple of (event_id, meet_link). meet_link is None if not requested.
         """
         try:
             event = {
@@ -226,17 +223,41 @@ class GoogleCalendarClient:
                 },
             }
 
+            # Add Google Meet conference if requested
+            if include_meet_link:
+                event["conferenceData"] = {
+                    "createRequest": {
+                        "requestId": f"meet-{start_datetime.timestamp()}",
+                        "conferenceSolutionKey": {"type": "hangoutsMeet"},
+                    }
+                }
+
             created_event = (
                 self.service.events()
-                .insert(calendarId=calendar_id, body=event)
+                .insert(
+                    calendarId=calendar_id,
+                    body=event,
+                    conferenceDataVersion=1 if include_meet_link else 0,
+                )
                 .execute()
             )
 
-            return created_event.get("id")
+            event_id = created_event.get("id")
+            meet_link = None
+
+            if include_meet_link:
+                conference_data = created_event.get("conferenceData", {})
+                entry_points = conference_data.get("entryPoints", [])
+                for entry in entry_points:
+                    if entry.get("entryPointType") == "video":
+                        meet_link = entry.get("uri")
+                        break
+
+            return event_id, meet_link
 
         except HttpError as e:
-            print(f"Error creating event: {e}")
-            return None
+            log.error("gcal", "Error creating event", error=str(e))
+            return None, None
 
     def delete_event(self, calendar_id: str, event_id: str) -> bool:
         """Deletes an event from the calendar."""
@@ -246,7 +267,7 @@ class GoogleCalendarClient:
             ).execute()
             return True
         except HttpError as e:
-            print(f"Error deleting event: {e}")
+            log.error("gcal", "Error deleting event", error=str(e))
             return False
 
 
@@ -269,11 +290,7 @@ def calculate_available_slots(
     Returns:
         List of available start times.
     """
-    print(f"[SLOTS DEBUG] ========================================")
-    print(f"[SLOTS DEBUG] calculate_available_slots called with:")
-    print(f"[SLOTS DEBUG]   availability_blocks: {availability_blocks}")
-    print(f"[SLOTS DEBUG]   booked_slots: {booked_slots}")
-    print(f"[SLOTS DEBUG]   duration_minutes: {duration_minutes}")
+    log.debug("slots", "calculate_available_slots", availability_blocks=availability_blocks, booked_slots=booked_slots, duration_minutes=duration_minutes)
 
     available_slots = []
 
@@ -281,8 +298,7 @@ def calculate_available_slots(
         avail_start_mins = avail_start.hour * 60 + avail_start.minute
         avail_end_mins = avail_end.hour * 60 + avail_end.minute
 
-        print(f"[SLOTS DEBUG] Processing block: {avail_start} - {avail_end}")
-        print(f"[SLOTS DEBUG]   In minutes: {avail_start_mins} - {avail_end_mins}")
+        log.debug("slots", "Processing block", start=avail_start, end=avail_end, start_mins=avail_start_mins, end_mins=avail_end_mins)
 
         current_mins = avail_start_mins
         slots_in_block = []
@@ -310,10 +326,9 @@ def calculate_available_slots(
             # Use service duration as interval to prevent overlapping appointments
             current_mins += duration_minutes
 
-        print(f"[SLOTS DEBUG]   Generated {len(slots_in_block)} slots: {slots_in_block[:5]}{'...' if len(slots_in_block) > 5 else ''}")
+        log.debug("slots", f"Generated {len(slots_in_block)} slots in block", sample=slots_in_block[:5])
 
-    print(f"[SLOTS DEBUG] Total slots generated: {len(available_slots)}")
-    print(f"[SLOTS DEBUG] ========================================")
+    log.debug("slots", f"Total slots generated: {len(available_slots)}")
     return available_slots
 
 

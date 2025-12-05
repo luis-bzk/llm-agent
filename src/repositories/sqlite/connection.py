@@ -120,6 +120,7 @@ class SQLiteConnection:
                     bot_name TEXT DEFAULT 'Asistente',
                     greeting_message TEXT,
                     whatsapp_number TEXT,
+                    appointment_type TEXT DEFAULT 'presencial',
                     created_at DATETIME,
                     updated_at DATETIME,
                     is_active INTEGER DEFAULT 1
@@ -246,6 +247,7 @@ class SQLiteConnection:
                     start_time TIME NOT NULL,
                     end_time TIME NOT NULL,
                     google_event_id TEXT,
+                    google_meet_link TEXT,
                     status TEXT DEFAULT 'scheduled',
                     cancellation_reason TEXT,
                     cancelled_at DATETIME,

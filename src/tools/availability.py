@@ -3,6 +3,7 @@
 from datetime import date, time, datetime, timedelta
 from langchain_core.tools import tool
 from ..container import get_container
+from ..config import logger as log
 from ..constants.config_keys import ConfigKeys, ConfigDefaults
 from .calendar_integration import (
     get_calendar_client,
@@ -43,25 +44,21 @@ def _get_available_slots_for_calendar(
                 google_calendar_id, target_date
             )
 
-            print(f"[DEBUG] Calendar {google_calendar_id} - Date {target_date}")
-            print(f"[DEBUG] mock_ai availability blocks: {availability_blocks}")
+            log.debug("availability", "Checking calendar", calendar_id=google_calendar_id, date=target_date, blocks=availability_blocks)
 
             if not availability_blocks:
-                print(f"[DEBUG] No mock_ai events found - employee not available")
+                log.debug("availability", "No mock_ai events - employee not available")
                 return []
 
             booked_slots = client.get_booked_slots(google_calendar_id, target_date)
-            print(f"[DEBUG] Booked slots: {booked_slots}")
+            log.debug("availability", "Booked slots", count=len(booked_slots), slots=booked_slots)
 
             return calculate_available_slots(
                 availability_blocks, booked_slots, duration_minutes
             )
 
         except Exception as e:
-            print(f"[ERROR] Error consultando Google Calendar: {e}")
-            import traceback
-
-            traceback.print_exc()
+            log.error("availability", "Error consultando Google Calendar", error=str(e))
             return []
 
     calendar = container.calendars.get_by_id(calendar_id)
@@ -142,11 +139,7 @@ def get_available_slots(
     }
 
     for calendar in calendars:
-        print(f"\n[AVAIL DEBUG] ========================================")
-        print(f"[AVAIL DEBUG] Processing calendar: {calendar.name}")
-        print(f"[AVAIL DEBUG]   calendar.id: {calendar.id}")
-        print(f"[AVAIL DEBUG]   google_calendar_id: {calendar.google_calendar_id}")
-        print(f"[AVAIL DEBUG]   service.duration_minutes: {service.duration_minutes}")
+        log.debug("availability", "Processing calendar", name=calendar.name, calendar_id=calendar.id, google_id=calendar.google_calendar_id, duration=service.duration_minutes)
 
         slots = _get_available_slots_for_calendar(
             calendar.id,
@@ -156,9 +149,7 @@ def get_available_slots(
             use_google=True,
         )
 
-        print(f"[AVAIL DEBUG] Returned slots count: {len(slots)}")
-        if slots:
-            print(f"[AVAIL DEBUG] First 5 slots: {[s.strftime('%H:%M') for s in slots[:5]]}")
+        log.debug("availability", f"Returned {len(slots)} slots", sample=[s.strftime('%H:%M') for s in slots[:5]] if slots else [])
 
         if slots:
             result["availability"].append(

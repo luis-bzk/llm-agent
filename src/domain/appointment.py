@@ -26,6 +26,7 @@ class Appointment:
     start_time: time
     end_time: time
     google_event_id: Optional[str] = None
+    google_meet_link: Optional[str] = None
     status: AppointmentStatus = "scheduled"
     cancellation_reason: Optional[str] = None
     cancelled_at: Optional[datetime] = None
@@ -57,6 +58,7 @@ class Appointment:
             start_time=data["start_time"],
             end_time=data["end_time"],
             google_event_id=data.get("google_event_id"),
+            google_meet_link=data.get("google_meet_link"),
             status=data.get("status", "scheduled"),
             cancellation_reason=data.get("cancellation_reason"),
             cancelled_at=data.get("cancelled_at"),
@@ -84,6 +86,7 @@ class Appointment:
             "start_time": self.start_time,
             "end_time": self.end_time,
             "google_event_id": self.google_event_id,
+            "google_meet_link": self.google_meet_link,
             "status": self.status,
             "cancellation_reason": self.cancellation_reason,
             "cancelled_at": self.cancelled_at,

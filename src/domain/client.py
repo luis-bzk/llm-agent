@@ -4,6 +4,8 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Optional
 
+from ..constants.appointment_types import AppointmentType
+
 
 @dataclass
 class Client:
@@ -22,6 +24,7 @@ class Client:
     bot_name: str = "Asistente"
     greeting_message: Optional[str] = None
     whatsapp_number: Optional[str] = None
+    appointment_type: str = AppointmentType.PRESENCIAL
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
     is_active: bool = True
@@ -43,6 +46,7 @@ class Client:
             bot_name=data.get("bot_name", "Asistente"),
             greeting_message=data.get("greeting_message"),
             whatsapp_number=data.get("whatsapp_number"),
+            appointment_type=data.get("appointment_type", AppointmentType.PRESENCIAL),
             created_at=data.get("created_at"),
             updated_at=data.get("updated_at"),
             is_active=bool(data.get("is_active", 1)),
@@ -64,6 +68,7 @@ class Client:
             "bot_name": self.bot_name,
             "greeting_message": self.greeting_message,
             "whatsapp_number": self.whatsapp_number,
+            "appointment_type": self.appointment_type,
             "created_at": self.created_at,
             "updated_at": self.updated_at,
             "is_active": self.is_active,
