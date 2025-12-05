@@ -5,6 +5,7 @@ from typing import Optional
 
 from ..interfaces.user_repository import IUserRepository
 from ...domain.user import User
+from ...config import logger as log
 from .connection import SQLiteConnection
 
 
@@ -16,14 +17,24 @@ class SQLiteUserRepository(IUserRepository):
 
     def get_by_id(self, user_id: str) -> Optional[User]:
         """Gets a user by ID."""
+        log.debug("repo.user", "get_by_id", user_id=user_id)
         with self._conn.get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute("SELECT * FROM users WHERE id = ?", (user_id,))
             row = cursor.fetchone()
-            return User.from_dict(dict(row)) if row else None
+            result = User.from_dict(dict(row)) if row else None
+            log.debug(
+                "repo.user",
+                "get_by_id result",
+                found=result is not None,
+                name=result.full_name if result else None,
+                client_id=result.client_id if result else None,
+            )
+            return result
 
     def get_by_phone(self, client_id: str, phone_number: str) -> Optional[User]:
         """Gets a user by phone number within a client."""
+        log.debug("repo.user", "get_by_phone", client_id=client_id, phone=phone_number)
         with self._conn.get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute(
@@ -31,12 +42,25 @@ class SQLiteUserRepository(IUserRepository):
                 (client_id, phone_number),
             )
             row = cursor.fetchone()
-            return User.from_dict(dict(row)) if row else None
+            result = User.from_dict(dict(row)) if row else None
+            log.debug(
+                "repo.user",
+                "get_by_phone result",
+                found=result is not None,
+                user_id=result.id if result else None,
+            )
+            return result
 
     def get_by_identification(
         self, client_id: str, identification_number: str
     ) -> Optional[User]:
         """Gets a user by ID number within a client."""
+        log.debug(
+            "repo.user",
+            "get_by_identification",
+            client_id=client_id,
+            cedula=identification_number,
+        )
         with self._conn.get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute(
@@ -44,10 +68,26 @@ class SQLiteUserRepository(IUserRepository):
                 (client_id, identification_number),
             )
             row = cursor.fetchone()
-            return User.from_dict(dict(row)) if row else None
+            result = User.from_dict(dict(row)) if row else None
+            log.debug(
+                "repo.user",
+                "get_by_identification result",
+                found=result is not None,
+                user_id=result.id if result else None,
+                name=result.full_name if result else None,
+            )
+            return result
 
     def create(self, user: User) -> User:
         """Creates a new user."""
+        log.info(
+            "repo.user",
+            "create",
+            user_id=user.id,
+            client_id=user.client_id,
+            name=user.full_name,
+            phone=user.phone_number,
+        )
         now = datetime.now()
         with self._conn.get_connection() as conn:
             cursor = conn.cursor()
@@ -69,10 +109,12 @@ class SQLiteUserRepository(IUserRepository):
             )
         user.created_at = now
         user.updated_at = now
+        log.debug("repo.user", "create success", user_id=user.id)
         return user
 
     def update(self, user: User) -> User:
         """Updates an existing user."""
+        log.debug("repo.user", "update", user_id=user.id, name=user.full_name)
         now = datetime.now()
         with self._conn.get_connection() as conn:
             cursor = conn.cursor()
@@ -96,4 +138,5 @@ class SQLiteUserRepository(IUserRepository):
                 ),
             )
         user.updated_at = now
+        log.debug("repo.user", "update success", user_id=user.id)
         return user

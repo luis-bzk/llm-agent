@@ -2,6 +2,7 @@
 
 from langchain_core.tools import tool
 from ..container import get_container
+from ..config import logger as log
 
 
 @tool
@@ -14,12 +15,15 @@ def get_categories(branch_id: str) -> list[dict] | str:
     Returns:
         List of categories with their services.
     """
+    log.info("services", "get_categories called", branch_id=branch_id)
     container = get_container()
     categories = container.categories.get_by_branch(branch_id)
 
     if not categories:
+        log.warn("services", "No categories found", branch_id=branch_id)
         return "No se encontraron categorías para esta sucursal."
 
+    log.debug("services", "Categories found", count=len(categories))
     result = []
     for cat in categories:
         services = container.services.get_by_category(cat.id)
@@ -54,11 +58,15 @@ def get_services(branch_id: str) -> list[dict] | str:
     Returns:
         List of services with details.
     """
+    log.info("services", "get_services called", branch_id=branch_id)
     container = get_container()
     services = container.services.get_by_branch(branch_id)
 
     if not services:
+        log.warn("services", "No services found", branch_id=branch_id)
         return "No se encontraron servicios para esta sucursal."
+
+    log.debug("services", "Services found", count=len(services))
 
     return [
         {
@@ -86,17 +94,21 @@ def get_service_details(branch_id: str, service_name: str) -> dict | str:
     Returns:
         Service details or error message.
     """
+    log.info("services", "get_service_details called", branch_id=branch_id, service_name=service_name)
     container = get_container()
     service = container.services.find_by_name(branch_id, service_name)
 
     if not service:
+        log.warn("services", "Service not found", service_name=service_name)
         all_services = container.services.get_by_branch(branch_id)
         if all_services:
             names = [s.name for s in all_services]
             return f"No encontré el servicio '{service_name}'. Servicios disponibles: {', '.join(names)}"
         return f"No encontré el servicio '{service_name}'."
 
+    log.debug("services", "Service found", service_id=service.id, duration=service.duration_minutes)
     calendars = container.calendars.get_for_service(service.id)
+    log.debug("services", "Available calendars", count=len(calendars))
 
     return {
         "service_id": service.id,

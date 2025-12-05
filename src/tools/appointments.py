@@ -36,10 +36,21 @@ def create_appointment(
     Returns:
         Created appointment details or error message.
     """
+    log.info(
+        "appointments",
+        "create_appointment called",
+        user_id=user_id,
+        branch_id=branch_id,
+        service=service_name,
+        calendar=calendar_name,
+        date=appointment_date,
+        time=appointment_time,
+    )
     container = get_container()
 
     user = container.users.get_by_id(user_id)
     if not user:
+        log.warn("appointments", "User not found", user_id=user_id)
         client = container.clients.get_by_id(user_id)
         if client:
             return (
@@ -51,16 +62,28 @@ def create_appointment(
 
     service = container.services.find_by_name(branch_id, service_name)
     if not service:
+        log.warn("appointments", "Service not found", service_name=service_name)
         return f"No encontré el servicio '{service_name}'."
+
+    log.debug("appointments", "Service found", service_id=service.id, duration=service.duration_minutes)
 
     calendar = container.calendars.find_by_name(branch_id, calendar_name)
     if not calendar:
+        log.warn("appointments", "Calendar not found", calendar_name=calendar_name)
         return f"No encontré al empleado '{calendar_name}'."
+
+    log.debug(
+        "appointments",
+        "Calendar found",
+        calendar_id=calendar.id,
+        google_calendar_id=calendar.google_calendar_id,
+    )
 
     try:
         apt_date = date.fromisoformat(appointment_date)
         apt_time = time.fromisoformat(appointment_time)
     except ValueError as e:
+        log.error("appointments", "Invalid date/time format", error=str(e))
         return f"Formato de fecha/hora inválido: {e}"
 
     duration = service.duration_minutes
@@ -76,7 +99,21 @@ def create_appointment(
         use_google=True,
     )
 
+    log.debug(
+        "appointments",
+        "Available slots retrieved",
+        count=len(available_slots),
+        requested_time=str(apt_time),
+        sample=[s.strftime("%H:%M") for s in available_slots[:5]] if available_slots else [],
+    )
+
     if apt_time not in available_slots:
+        log.warn(
+            "appointments",
+            "Requested time not available",
+            requested=str(apt_time),
+            available_count=len(available_slots),
+        )
         if available_slots:
             alternatives = [s.strftime("%H:%M") for s in available_slots[:5]]
             return (
@@ -87,13 +124,21 @@ def create_appointment(
             f"No hay horarios disponibles para {appointment_date} con {calendar_name}."
         )
 
-    # Get client to check appointment type
-    client = container.clients.get_by_whatsapp(user.phone_number)
+    # Get client to check appointment type (use user's client_id, NOT user's phone)
+    client = container.clients.get_by_id(user.client_id)
     is_virtual = client and client.appointment_type == AppointmentType.VIRTUAL
+    log.debug(
+        "appointments",
+        "Appointment type determined",
+        is_virtual=is_virtual,
+        client_id=user.client_id,
+        client_appointment_type=client.appointment_type if client else None,
+    )
 
     google_event_id = None
     google_meet_link = None
     try:
+        log.debug("appointments", "Creating Google Calendar event", include_meet=is_virtual)
         calendar_client = get_calendar_client()
 
         user_name = user.full_name or "Usuario"
@@ -115,12 +160,22 @@ def create_appointment(
             include_meet_link=is_virtual,
         )
 
+        log.info(
+            "appointments",
+            "Google Calendar event created",
+            event_id=google_event_id,
+            meet_link=google_meet_link,
+        )
+
         # Add meet link to description if virtual
         if google_meet_link:
             event_description += f"\n\nEnlace Google Meet: {google_meet_link}"
     except Exception as e:
-        log.warn(
-            "appointments", "No se pudo crear evento en Google Calendar", error=str(e)
+        log.error(
+            "appointments",
+            "Failed to create Google Calendar event",
+            error=str(e),
+            calendar_id=calendar.google_calendar_id,
         )
 
     from ..domain.appointment import Appointment
@@ -144,6 +199,12 @@ def create_appointment(
     )
 
     container.appointments.create(appointment)
+    log.info(
+        "appointments",
+        "Appointment created in database",
+        appointment_id=appointment.id,
+        status=appointment.status,
+    )
 
     branch = container.branches.get_by_id(branch_id)
 
@@ -185,9 +246,11 @@ def get_user_appointments(user_id: str) -> dict | str:
     Returns:
         List of user appointments.
     """
+    log.info("appointments", "get_user_appointments called", user_id=user_id)
     container = get_container()
 
     upcoming = container.appointments.get_upcoming_by_user(user_id)
+    log.debug("appointments", "Appointments found", count=len(upcoming))
 
     if not upcoming:
         return "No tienes citas programadas."
@@ -227,30 +290,36 @@ def cancel_appointment(appointment_id: str, reason: str) -> dict | str:
     Returns:
         Cancellation confirmation.
     """
+    log.info("appointments", "cancel_appointment called", appointment_id=appointment_id, reason=reason)
     container = get_container()
 
     appointment = container.appointments.get_by_id(appointment_id)
     if not appointment:
+        log.warn("appointments", "Appointment not found", appointment_id=appointment_id)
         return f"No se encontró la cita {appointment_id}."
 
     if appointment.status == "cancelled":
+        log.warn("appointments", "Appointment already cancelled", appointment_id=appointment_id)
         return "Esta cita ya fue cancelada anteriormente."
 
     if appointment.google_event_id:
         try:
+            log.debug("appointments", "Deleting Google Calendar event", event_id=appointment.google_event_id)
             calendar = container.calendars.get_by_id(appointment.calendar_id)
             client = get_calendar_client()
             client.delete_event(
                 calendar.google_calendar_id, appointment.google_event_id
             )
+            log.info("appointments", "Google Calendar event deleted")
         except Exception as e:
-            log.warn(
+            log.error(
                 "appointments",
-                "No se pudo eliminar evento de Google Calendar",
+                "Failed to delete Google Calendar event",
                 error=str(e),
             )
 
     container.appointments.cancel(appointment_id, reason, "user")
+    log.info("appointments", "Appointment cancelled", appointment_id=appointment_id)
 
     return {
         "success": True,
@@ -286,19 +355,29 @@ def reschedule_appointment(
     Returns:
         Reschedule confirmation.
     """
+    log.info(
+        "appointments",
+        "reschedule_appointment called",
+        appointment_id=appointment_id,
+        new_date=new_date,
+        new_time=new_time,
+    )
     container = get_container()
 
     appointment = container.appointments.get_by_id(appointment_id)
     if not appointment:
+        log.warn("appointments", "Appointment not found for reschedule", appointment_id=appointment_id)
         return f"No se encontró la cita {appointment_id}."
 
     if appointment.status != "scheduled":
+        log.warn("appointments", "Cannot reschedule non-active appointment", status=appointment.status)
         return "Solo se pueden reagendar citas activas."
 
     try:
         apt_date = date.fromisoformat(new_date)
         apt_time = time.fromisoformat(new_time)
     except ValueError as e:
+        log.error("appointments", "Invalid date/time for reschedule", error=str(e))
         return f"Formato de fecha/hora inválido: {e}"
 
     calendar = container.calendars.get_by_id(appointment.calendar_id)

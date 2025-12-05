@@ -103,10 +103,19 @@ def get_available_slots(
     Returns:
         Dictionary with available slots per calendar.
     """
+    log.info(
+        "availability",
+        "get_available_slots called",
+        branch_id=branch_id,
+        service=service_name,
+        date=target_date,
+        calendar=calendar_name,
+    )
     container = get_container()
 
     service = container.services.find_by_name(branch_id, service_name)
     if not service:
+        log.warn("availability", "Service not found", service_name=service_name)
         all_services = container.services.get_by_branch(branch_id)
         if all_services:
             names = [s.name for s in all_services]
@@ -204,10 +213,18 @@ def get_calendar_availability(
     Returns:
         Calendar availability information.
     """
+    log.info(
+        "availability",
+        "get_calendar_availability called",
+        branch_id=branch_id,
+        calendar=calendar_name,
+        date=target_date,
+    )
     container = get_container()
 
     calendar = container.calendars.find_by_name(branch_id, calendar_name)
     if not calendar:
+        log.warn("availability", "Calendar not found", calendar_name=calendar_name)
         calendars = container.calendars.get_by_branch(branch_id)
         if calendars:
             names = [c.name for c in calendars]

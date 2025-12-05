@@ -12,14 +12,34 @@ Usage:
 """
 
 import argparse
+import hashlib
 import json
+import os
 import sqlite3
-import uuid
+import sys
 from datetime import datetime, time, timedelta
 from pathlib import Path
 
-# Paths
+from dotenv import load_dotenv
+
+# Load .env file from project root
 SCRIPT_DIR = Path(__file__).parent.parent
+load_dotenv(SCRIPT_DIR / ".env")
+
+# Validate AGENT_NAME at startup
+AGENT_NAME = os.getenv("AGENT_NAME")
+if not AGENT_NAME:
+    print("=" * 70)
+    print("ERROR: AGENT_NAME environment variable is required")
+    print("=" * 70)
+    print("\nPlease set the AGENT_NAME environment variable before running setup.")
+    print("Example:")
+    print("  export AGENT_NAME=Virsi")
+    print("  python scripts/local_setup.py --calendars")
+    print()
+    sys.exit(1)
+
+# Paths (SCRIPT_DIR already defined above for loading .env)
 DB_PATH = SCRIPT_DIR / "data" / "agent.db"
 CREDENTIALS_PATH = SCRIPT_DIR / "config" / "google_credentials.json"
 TOKEN_PATH = SCRIPT_DIR / "config" / "token.json"
@@ -130,8 +150,9 @@ SYSTEM_CONFIG = [
 ]
 
 
-def generate_id() -> str:
-    return str(uuid.uuid4())
+def generate_id(name: str) -> str:
+    """Generates a deterministic UUID based on name for idempotent inserts."""
+    return hashlib.md5(name.encode()).hexdigest()
 
 
 def time_to_str(t: time) -> str:
@@ -178,7 +199,7 @@ def seed_demo_data(cursor: sqlite3.Cursor) -> str:
     now = datetime.now().isoformat()
 
     # Client
-    client_id = generate_id()
+    client_id = generate_id("client:clinicas_salud_total")
     cursor.execute(
         """INSERT OR REPLACE INTO clients (
             id, email, business_name, owner_name, phone,
@@ -196,10 +217,10 @@ def seed_demo_data(cursor: sqlite3.Cursor) -> str:
             15,
             500,
             30,
-            "AiBot",
-            "¡Hola! Soy AiBot, el asistente virtual de Clínicas Salud Total. ¿En qué puedo ayudarte hoy?",
+            "Virsi",
+            "¡Hola! Soy Virsi, el asistente virtual de Clínicas Salud Total. ¿En qué puedo ayudarte hoy?",
             "+593912345678",
-            "presencial",  # appointment_type: presencial or virtual
+            "virtual",  # appointment_type: presencial or virtual
             now,
             now,
             1,
@@ -209,7 +230,7 @@ def seed_demo_data(cursor: sqlite3.Cursor) -> str:
     print(f"   WhatsApp: +593912345678")
 
     # Branch 1: Clínica Centro
-    branch1_id = generate_id()
+    branch1_id = generate_id("branch:clinica_centro")
     cursor.execute(
         """INSERT OR REPLACE INTO branches (
             id, client_id, name, address, city,
@@ -234,7 +255,7 @@ def seed_demo_data(cursor: sqlite3.Cursor) -> str:
     print(f"\n✓ Branch 1: Clínica Centro")
 
     # Categories and Services for Branch 1
-    cat_general = generate_id()
+    cat_general = generate_id("category:consultas_generales")
     cursor.execute(
         """INSERT OR REPLACE INTO categories (id, branch_id, name, description, display_order, created_at, is_active)
            VALUES (?, ?, ?, ?, ?, ?, ?)""",
@@ -249,9 +270,9 @@ def seed_demo_data(cursor: sqlite3.Cursor) -> str:
         ),
     )
 
-    svc_consulta = generate_id()
-    svc_control = generate_id()
-    svc_chequeo = generate_id()
+    svc_consulta = generate_id("service:consulta_general")
+    svc_control = generate_id("service:control_medico")
+    svc_chequeo = generate_id("service:chequeo_preventivo")
     for svc_id, name, desc, price, duration in [
         (svc_consulta, "Consulta General", "Consulta médica general", 20.00, 30),
         (svc_control, "Control Médico", "Seguimiento de tratamientos", 15.00, 20),
@@ -263,15 +284,15 @@ def seed_demo_data(cursor: sqlite3.Cursor) -> str:
             (svc_id, cat_general, branch1_id, name, desc, price, duration, now, 1),
         )
 
-    cat_pediatria = generate_id()
+    cat_pediatria = generate_id("category:pediatria")
     cursor.execute(
         """INSERT OR REPLACE INTO categories (id, branch_id, name, description, display_order, created_at, is_active)
            VALUES (?, ?, ?, ?, ?, ?, ?)""",
         (cat_pediatria, branch1_id, "Pediatría", "Atención para niños", 2, now, 1),
     )
 
-    svc_pediatrica = generate_id()
-    svc_nino_sano = generate_id()
+    svc_pediatrica = generate_id("service:consulta_pediatrica")
+    svc_nino_sano = generate_id("service:control_nino_sano")
     for svc_id, name, desc, price, duration in [
         (svc_pediatrica, "Consulta Pediátrica", "Consulta para niños", 25.00, 30),
         (svc_nino_sano, "Control de Niño Sano", "Seguimiento infantil", 18.00, 25),
@@ -282,15 +303,15 @@ def seed_demo_data(cursor: sqlite3.Cursor) -> str:
             (svc_id, cat_pediatria, branch1_id, name, desc, price, duration, now, 1),
         )
 
-    cat_cardio = generate_id()
+    cat_cardio = generate_id("category:cardiologia")
     cursor.execute(
         """INSERT OR REPLACE INTO categories (id, branch_id, name, description, display_order, created_at, is_active)
            VALUES (?, ?, ?, ?, ?, ?, ?)""",
         (cat_cardio, branch1_id, "Cardiología", "Atención cardiovascular", 3, now, 1),
     )
 
-    svc_cardio = generate_id()
-    svc_electro = generate_id()
+    svc_cardio = generate_id("service:consulta_cardiologica")
+    svc_electro = generate_id("service:electrocardiograma")
     for svc_id, name, desc, price, duration in [
         (svc_cardio, "Consulta Cardiológica", "Evaluación cardiovascular", 40.00, 40),
         (svc_electro, "Electrocardiograma", "Estudio del corazón", 30.00, 20),
@@ -304,7 +325,7 @@ def seed_demo_data(cursor: sqlite3.Cursor) -> str:
     # Calendars for Branch 1
     def create_calendar(key: str, branch_id: str) -> str:
         emp = EMPLOYEES[key]
-        cal_id = generate_id()
+        cal_id = generate_id(f"calendar:{key}")
         cursor.execute(
             """INSERT OR REPLACE INTO calendars (
                 id, branch_id, name, google_calendar_id, google_account_email,
@@ -329,7 +350,12 @@ def seed_demo_data(cursor: sqlite3.Cursor) -> str:
         for svc_id in service_ids:
             cursor.execute(
                 "INSERT OR REPLACE INTO calendar_services (id, calendar_id, service_id, created_at) VALUES (?, ?, ?, ?)",
-                (generate_id(), calendar_id, svc_id, now),
+                (
+                    generate_id(f"cal_svc:{calendar_id}:{svc_id}"),
+                    calendar_id,
+                    svc_id,
+                    now,
+                ),
             )
 
     cal_mario = create_calendar("mario_gomez", branch1_id)
@@ -353,7 +379,7 @@ def seed_demo_data(cursor: sqlite3.Cursor) -> str:
     print(f"   6 calendars created")
 
     # Branch 2: Clínica Norte
-    branch2_id = generate_id()
+    branch2_id = generate_id("branch:clinica_norte")
     cursor.execute(
         """INSERT OR REPLACE INTO branches (
             id, client_id, name, address, city,
@@ -378,7 +404,7 @@ def seed_demo_data(cursor: sqlite3.Cursor) -> str:
     print(f"\n✓ Branch 2: Clínica Norte")
 
     # Categories and Services for Branch 2
-    cat_dental = generate_id()
+    cat_dental = generate_id("category:servicios_dentales")
     cursor.execute(
         """INSERT OR REPLACE INTO categories (id, branch_id, name, description, display_order, created_at, is_active)
            VALUES (?, ?, ?, ?, ?, ?, ?)""",
@@ -393,9 +419,9 @@ def seed_demo_data(cursor: sqlite3.Cursor) -> str:
         ),
     )
 
-    svc_limpieza = generate_id()
-    svc_curacion = generate_id()
-    svc_revision = generate_id()
+    svc_limpieza = generate_id("service:limpieza_dental")
+    svc_curacion = generate_id("service:curacion_dental")
+    svc_revision = generate_id("service:revision_dental")
     for svc_id, name, desc, price, duration in [
         (svc_limpieza, "Limpieza Dental", "Limpieza profesional", 30.00, 30),
         (svc_curacion, "Curación Dental", "Restauración de caries", 25.00, 25),
@@ -407,15 +433,15 @@ def seed_demo_data(cursor: sqlite3.Cursor) -> str:
             (svc_id, cat_dental, branch2_id, name, desc, price, duration, now, 1),
         )
 
-    cat_dermato = generate_id()
+    cat_dermato = generate_id("category:dermatologia")
     cursor.execute(
         """INSERT OR REPLACE INTO categories (id, branch_id, name, description, display_order, created_at, is_active)
            VALUES (?, ?, ?, ?, ?, ?, ?)""",
         (cat_dermato, branch2_id, "Dermatología", "Cuidado de la piel", 2, now, 1),
     )
 
-    svc_dermato = generate_id()
-    svc_acne = generate_id()
+    svc_dermato = generate_id("service:consulta_dermatologica")
+    svc_acne = generate_id("service:tratamiento_acne")
     for svc_id, name, desc, price, duration in [
         (svc_dermato, "Consulta Dermatológica", "Evaluación de piel", 35.00, 30),
         (svc_acne, "Tratamiento de Acné", "Tratamiento especializado", 45.00, 40),
@@ -568,10 +594,9 @@ def setup_google_calendars(cursor: sqlite3.Cursor):
 
 def create_availability_events(cursor: sqlite3.Cursor, service):
     """Creates recurring availability marker events for all calendars."""
-    import os
     from googleapiclient.errors import HttpError
 
-    marker_name = os.getenv("AGENT_NAME", "Assistant").lower()
+    marker_name = AGENT_NAME.lower()
 
     print("\n" + "=" * 70)
     print("CREATING AVAILABILITY MARKER EVENTS")

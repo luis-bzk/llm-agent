@@ -30,14 +30,18 @@ class SQLiteConversationRepository(IConversationRepository):
         self, session_id: str, timeout_hours: int = 2
     ) -> Optional[Conversation]:
         """Gets the active conversation for a session within timeout."""
+        from datetime import timedelta
+
+        cutoff_time = datetime.now() - timedelta(hours=timeout_hours)
+
         with self._conn.get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute(
                 """SELECT * FROM conversations
                    WHERE session_id = ? AND status = 'active'
-                   AND last_message_at > datetime('now', ?)
+                   AND last_message_at > ?
                    ORDER BY created_at DESC LIMIT 1""",
-                (session_id, f"-{timeout_hours} hours"),
+                (session_id, cutoff_time.isoformat()),
             )
             row = cursor.fetchone()
             return Conversation.from_dict(dict(row)) if row else None

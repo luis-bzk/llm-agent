@@ -4,6 +4,7 @@ import uuid
 from datetime import datetime
 from langchain_core.tools import tool
 from ..container import get_container
+from ..config import logger as log
 from ..domain.user import User
 
 
@@ -22,11 +23,20 @@ def find_or_create_user(
     Returns:
         User data (existing or newly created).
     """
+    log.info(
+        "user",
+        "find_or_create_user called",
+        client_id=client_id,
+        phone=phone_number,
+        cedula=identification_number,
+        name=full_name,
+    )
     container = get_container()
 
     existing = container.users.get_by_identification(client_id, identification_number)
 
     if existing:
+        log.info("user", "Existing user found", user_id=existing.id, name=existing.full_name)
         return {
             "user_id": existing.id,
             "full_name": existing.full_name,
@@ -45,6 +55,7 @@ def find_or_create_user(
         full_name=full_name,
     )
     container.users.create(new_user)
+    log.info("user", "New user created", user_id=new_user.id, name=new_user.full_name)
 
     return {
         "user_id": new_user.id,
@@ -67,11 +78,15 @@ def get_user_info(client_id: str, identification_number: str) -> dict | str:
     Returns:
         User information with appointment history.
     """
+    log.info("user", "get_user_info called", client_id=client_id, cedula=identification_number)
     container = get_container()
 
     user = container.users.get_by_identification(client_id, identification_number)
     if not user:
+        log.warn("user", "User not found", cedula=identification_number)
         return f"No se encontró usuario con cédula {identification_number}"
+
+    log.debug("user", "User found", user_id=user.id, name=user.full_name)
 
     appointments = container.appointments.get_by_user(user.id)
 
