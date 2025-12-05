@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Test de Double Texting - Agente mock_ai
+Test de Double Texting - Scheduling Agent
 
 Este script demuestra cómo manejar el escenario donde el usuario
 envía múltiples mensajes rápidamente ("hola", "como estas", "necesito cita").
@@ -97,7 +97,7 @@ async def test_enqueue_strategy():
                 and m.content
                 and not getattr(m, "tool_calls", None)
             ):
-                print(f"[Mensaje {i}] mock_ai: {m.content}")
+                print(f"[Mensaje {i}] Agent: {m.content}")
                 break
 
         print()
@@ -127,8 +127,8 @@ async def test_interrupt_strategy():
 Para usar la estrategia 'interrupt' en producción:
 
 1. Deploy del agente en LangGraph Platform:
-   $ cd mock_ai-agent
-   $ langgraph build -t mock_ai-agent
+   $ cd scheduling-agent
+   $ langgraph build -t scheduling-agent
    $ docker compose up
 
 2. Usar el SDK de LangGraph:
@@ -141,7 +141,7 @@ Para usar la estrategia 'interrupt' en producción:
    # Primer mensaje
    run1 = await client.runs.create(
        thread["thread_id"],
-       "mock_ai",
+       "agent",
        input={"messages": [{"role": "human", "content": "hola"}]},
        config=config
    )
@@ -149,7 +149,7 @@ Para usar la estrategia 'interrupt' en producción:
    # Segundo mensaje con interrupt - interrumpe run1
    run2 = await client.runs.create(
        thread["thread_id"],
-       "mock_ai",
+       "agent",
        input={"messages": [{"role": "human", "content": "necesito una cita"}]},
        config=config,
        multitask_strategy="interrupt"  # <-- Clave
@@ -170,7 +170,7 @@ Estrategias disponibles:
 async def main():
     """Ejecutar tests"""
     print()
-    print("MOCK_AI AGENT - Test de Double Texting")
+    print("SCHEDULING AGENT - Test de Double Texting")
     print()
 
     await test_enqueue_strategy()

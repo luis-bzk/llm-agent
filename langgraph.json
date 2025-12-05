@@ -1,6 +1,6 @@
 {
   "graphs": {
-    "mock_ai": "src.agent:graph"
+    "scheduling": "src.agent:graph"
   },
   "env": ".env",
   "python_version": "3.11",

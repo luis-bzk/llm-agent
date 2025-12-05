@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Test CLI for the mock_ai agent with detailed logging."""
+"""Test CLI for the scheduling agent with detailed logging."""
 
 import os
 import sys
@@ -42,11 +42,19 @@ def log(category: str, message: str, data: any = None):
     """Prints formatted log message."""
     color = COLORS.get(category, "white")
     timestamp = datetime.now().strftime("%H:%M:%S")
-    console.print(f"[dim]{timestamp}[/dim] [{color}][{category.upper()}][/{color}] {message}")
+    console.print(
+        f"[dim]{timestamp}[/dim] [{color}][{category.upper()}][/{color}] {message}"
+    )
 
     if data:
         if isinstance(data, dict):
-            console.print(Syntax(json.dumps(data, indent=2, default=str, ensure_ascii=False), "json", theme="monokai"))
+            console.print(
+                Syntax(
+                    json.dumps(data, indent=2, default=str, ensure_ascii=False),
+                    "json",
+                    theme="monokai",
+                )
+            )
         elif isinstance(data, list):
             for item in data:
                 console.print(f"  • {item}")
@@ -130,11 +138,15 @@ class LoggingGraph:
         """
         console.print("\n" + "=" * 60)
         log("info", "Starting graph invocation")
-        log("info", "Input:", {
-            "messages": len(input_state.get("messages", [])),
-            "from_number": input_state.get("from_number"),
-            "to_number": input_state.get("to_number"),
-        })
+        log(
+            "info",
+            "Input:",
+            {
+                "messages": len(input_state.get("messages", [])),
+                "from_number": input_state.get("from_number"),
+                "to_number": input_state.get("to_number"),
+            },
+        )
 
         events = []
         for event in self.graph.stream(input_state, config, stream_mode="updates"):
@@ -148,13 +160,27 @@ class LoggingGraph:
 
                 if node_name == "load_context":
                     if "conversation_id" in node_output:
-                        log("db", f"Conversation ID: {node_output['conversation_id'][:8]}...")
+                        log(
+                            "db",
+                            f"Conversation ID: {node_output['conversation_id'][:8]}...",
+                        )
                     if "messages" in node_output:
                         log("info", f"Messages loaded: {len(node_output['messages'])}")
-                        msgs = [m for m in node_output["messages"]
-                                if not (isinstance(m, SystemMessage) and m.content == "__REPLACE_MESSAGES__")]
+                        msgs = [
+                            m
+                            for m in node_output["messages"]
+                            if not (
+                                isinstance(m, SystemMessage)
+                                and m.content == "__REPLACE_MESSAGES__"
+                            )
+                        ]
                         if msgs:
-                            console.print(Panel(format_messages_for_display(msgs), title="Messages for LLM"))
+                            console.print(
+                                Panel(
+                                    format_messages_for_display(msgs),
+                                    title="Messages for LLM",
+                                )
+                            )
 
                 elif node_name == "assistant":
                     if "messages" in node_output:
@@ -163,7 +189,10 @@ class LoggingGraph:
                                 if msg.tool_calls:
                                     log("tool", "LLM decided to call tools:")
                                     for tc in msg.tool_calls:
-                                        log("tool", f"  → {tc['name']}({json.dumps(tc['args'], ensure_ascii=False)[:100]})")
+                                        log(
+                                            "tool",
+                                            f"  → {tc['name']}({json.dumps(tc['args'], ensure_ascii=False)[:100]})",
+                                        )
                                 else:
                                     log("llm", f"LLM response: {msg.content[:200]}...")
 
@@ -171,7 +200,11 @@ class LoggingGraph:
                     if "messages" in node_output:
                         for msg in node_output["messages"]:
                             if isinstance(msg, ToolMessage):
-                                result = msg.content[:200] + "..." if len(msg.content) > 200 else msg.content
+                                result = (
+                                    msg.content[:200] + "..."
+                                    if len(msg.content) > 200
+                                    else msg.content
+                                )
                                 log("tool", f"Result from {msg.name}: {result}")
 
                 elif node_name == "save_final_response":
@@ -195,12 +228,14 @@ class LoggingGraph:
 
 def main():
     """Main chat loop."""
-    console.print(Panel.fit(
-        "[bold blue]mock_ai Agent - Test CLI[/bold blue]\n"
-        "[dim]Stateless agent with detailed logging[/dim]\n\n"
-        "Commands: /quit, /clear, /db, /state",
-        title="🤖 mock_ai",
-    ))
+    console.print(
+        Panel.fit(
+            "[bold blue]Scheduling Agent - Test CLI[/bold blue]\n"
+            "[dim]Stateless agent with detailed logging[/dim]\n\n"
+            "Commands: /quit, /clear, /db, /state",
+            title="🤖 Agent",
+        )
+    )
 
     container = get_container()
     client = container.clients.get_by_whatsapp(BUSINESS_WHATSAPP)
@@ -262,12 +297,22 @@ def main():
             response = ""
             messages = result.get("messages", [])
             for msg in reversed(messages):
-                if isinstance(msg, AIMessage) and msg.content and not getattr(msg, "tool_calls", None):
+                if (
+                    isinstance(msg, AIMessage)
+                    and msg.content
+                    and not getattr(msg, "tool_calls", None)
+                ):
                     response = msg.content
                     break
 
             if response:
-                console.print(Panel(response, title="[bold blue]🤖 mock_ai[/bold blue]", border_style="blue"))
+                console.print(
+                    Panel(
+                        response,
+                        title="[bold blue]🤖 Agent[/bold blue]",
+                        border_style="blue",
+                    )
+                )
             else:
                 console.print("[red]No response received[/red]")
 
@@ -277,6 +322,7 @@ def main():
         except Exception as e:
             console.print(f"[red]Error: {e}[/red]")
             import traceback
+
             traceback.print_exc()
 
 

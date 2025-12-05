@@ -21,8 +21,8 @@ def _get_available_slots_for_calendar(
 ) -> list[time]:
     """Gets available slots for a specific calendar.
 
-    Only returns slots if there are "mock_ai" events marking availability.
-    If no "mock_ai" events exist for that date, the employee is NOT available.
+    Only returns slots if there are marker events marking availability.
+    If no marker events exist for that date, the employee is NOT available.
 
     Args:
         calendar_id: Calendar ID in database.
@@ -40,18 +40,29 @@ def _get_available_slots_for_calendar(
         try:
             client = get_calendar_client()
 
-            availability_blocks = client.get_mock_ai_availability(
+            availability_blocks = client.get_availability_blocks(
                 google_calendar_id, target_date
             )
 
-            log.debug("availability", "Checking calendar", calendar_id=google_calendar_id, date=target_date, blocks=availability_blocks)
+            log.debug(
+                "availability",
+                "Checking calendar",
+                calendar_id=google_calendar_id,
+                date=target_date,
+                blocks=availability_blocks,
+            )
 
             if not availability_blocks:
-                log.debug("availability", "No mock_ai events - employee not available")
+                log.debug("availability", "No marker events - employee not available")
                 return []
 
             booked_slots = client.get_booked_slots(google_calendar_id, target_date)
-            log.debug("availability", "Booked slots", count=len(booked_slots), slots=booked_slots)
+            log.debug(
+                "availability",
+                "Booked slots",
+                count=len(booked_slots),
+                slots=booked_slots,
+            )
 
             return calculate_available_slots(
                 availability_blocks, booked_slots, duration_minutes
@@ -111,10 +122,12 @@ def get_available_slots(
     if parsed_date < today:
         return "No puedo agendar en fechas pasadas. Por favor elige una fecha futura."
 
-    max_days = int(container.config.get_value(
-        ConfigKeys.DEFAULT_BOOKING_WINDOW_DAYS,
-        ConfigDefaults.DEFAULT_BOOKING_WINDOW_DAYS
-    ))
+    max_days = int(
+        container.config.get_value(
+            ConfigKeys.DEFAULT_BOOKING_WINDOW_DAYS,
+            ConfigDefaults.DEFAULT_BOOKING_WINDOW_DAYS,
+        )
+    )
     if (parsed_date - today).days > max_days:
         return f"Solo puedo agendar dentro de los próximos {max_days} días."
 
@@ -139,7 +152,14 @@ def get_available_slots(
     }
 
     for calendar in calendars:
-        log.debug("availability", "Processing calendar", name=calendar.name, calendar_id=calendar.id, google_id=calendar.google_calendar_id, duration=service.duration_minutes)
+        log.debug(
+            "availability",
+            "Processing calendar",
+            name=calendar.name,
+            calendar_id=calendar.id,
+            google_id=calendar.google_calendar_id,
+            duration=service.duration_minutes,
+        )
 
         slots = _get_available_slots_for_calendar(
             calendar.id,
@@ -149,7 +169,11 @@ def get_available_slots(
             use_google=True,
         )
 
-        log.debug("availability", f"Returned {len(slots)} slots", sample=[s.strftime('%H:%M') for s in slots[:5]] if slots else [])
+        log.debug(
+            "availability",
+            f"Returned {len(slots)} slots",
+            sample=[s.strftime("%H:%M") for s in slots[:5]] if slots else [],
+        )
 
         if slots:
             result["availability"].append(
@@ -197,7 +221,7 @@ def get_calendar_availability(
 
     try:
         client = get_calendar_client()
-        availability_blocks = client.get_mock_ai_availability(
+        availability_blocks = client.get_availability_blocks(
             calendar.google_calendar_id, parsed_date
         )
         booked_slots = client.get_booked_slots(calendar.google_calendar_id, parsed_date)

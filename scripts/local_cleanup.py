@@ -16,7 +16,7 @@ from pathlib import Path
 
 # Paths
 SCRIPT_DIR = Path(__file__).parent.parent
-DB_PATH = SCRIPT_DIR / "data" / "mock_ai.db"
+DB_PATH = SCRIPT_DIR / "data" / "agent.db"
 CREDENTIALS_PATH = SCRIPT_DIR / "config" / "google_credentials.json"
 TOKEN_PATH = SCRIPT_DIR / "config" / "token.json"
 
@@ -81,13 +81,15 @@ def delete_google_calendars():
     conn.row_factory = sqlite3.Row
     cursor = conn.cursor()
 
-    cursor.execute("""
+    cursor.execute(
+        """
         SELECT c.name, c.google_calendar_id, b.name as branch_name
         FROM calendars c
         JOIN branches b ON c.branch_id = b.id
         WHERE c.google_calendar_id != '' AND c.google_calendar_id IS NOT NULL
         ORDER BY b.name, c.name
-    """)
+    """
+    )
     calendars = cursor.fetchall()
     conn.close()
 
@@ -145,7 +147,9 @@ def delete_database():
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Local cleanup - delete calendars and database")
+    parser = argparse.ArgumentParser(
+        description="Local cleanup - delete calendars and database"
+    )
     parser.add_argument(
         "--db-only",
         action="store_true",
@@ -159,7 +163,7 @@ def main():
     args = parser.parse_args()
 
     print("=" * 70)
-    print("LOCAL CLEANUP - mock_ai Agent")
+    print("LOCAL CLEANUP - Scheduling Agent")
     print("=" * 70)
 
     if args.db_only:

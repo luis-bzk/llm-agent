@@ -5,6 +5,7 @@ from datetime import datetime, date, time, timedelta
 from langchain_core.tools import tool
 from ..container import get_container
 from ..config import logger as log
+from ..config.env import get_agent_name
 from ..constants.appointment_types import AppointmentType
 from .calendar_integration import get_calendar_client
 from .availability import _get_available_slots_for_calendar
@@ -99,7 +100,7 @@ def create_appointment(
         user_cedula = user.identification_number or ""
         event_summary = f"{service.name} - {user_name} ({user_cedula})"
         event_description = (
-            f"Cita agendada via mock_ai\n"
+            f"Cita agendada via {get_agent_name()}\n"
             f"Cliente: {user_name}\n"
             f"Cédula: {user_cedula}\n"
             f"Teléfono: {user.phone_number or 'N/A'}"
@@ -118,7 +119,9 @@ def create_appointment(
         if google_meet_link:
             event_description += f"\n\nEnlace Google Meet: {google_meet_link}"
     except Exception as e:
-        log.warn("appointments", "No se pudo crear evento en Google Calendar", error=str(e))
+        log.warn(
+            "appointments", "No se pudo crear evento en Google Calendar", error=str(e)
+        )
 
     from ..domain.appointment import Appointment
 
@@ -241,7 +244,11 @@ def cancel_appointment(appointment_id: str, reason: str) -> dict | str:
                 calendar.google_calendar_id, appointment.google_event_id
             )
         except Exception as e:
-            log.warn("appointments", "No se pudo eliminar evento de Google Calendar", error=str(e))
+            log.warn(
+                "appointments",
+                "No se pudo eliminar evento de Google Calendar",
+                error=str(e),
+            )
 
     container.appointments.cancel(appointment_id, reason, "user")
 
@@ -331,7 +338,7 @@ def reschedule_appointment(
                 user_cedula = user.identification_number or ""
                 event_summary = f"{appointment.service_name_snapshot} - {user_name} ({user_cedula}) [Reagendada]"
                 event_description = (
-                    f"Cita reagendada via mock_ai\n"
+                    f"Cita reagendada via {get_agent_name()}\n"
                     f"Cliente: {user_name}\n"
                     f"Cédula: {user_cedula}\n"
                     f"Teléfono: {user.phone_number or 'N/A'}"
@@ -340,7 +347,7 @@ def reschedule_appointment(
                 event_summary = (
                     f"{appointment.service_name_snapshot} - Cita (reagendada)"
                 )
-                event_description = "Cita reagendada via mock_ai"
+                event_description = f"Cita reagendada via {get_agent_name()}"
 
             new_event_id, _ = client.create_appointment_event(
                 calendar.google_calendar_id,

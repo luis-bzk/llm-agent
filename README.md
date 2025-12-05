@@ -1,4 +1,4 @@
-# mock_ai Agent - Demo de Agendación de Citas
+# Scheduling Agent - Demo de Agendación de Citas
 
 Agente conversacional de LangGraph para agendación de citas médicas por WhatsApp.
 
@@ -39,7 +39,7 @@ python3 --version
 ### 1. Clonar/Navegar al proyecto
 
 ```bash
-cd mock_ai-agent
+cd scheduling-agent
 ```
 
 ### 2. Crear entorno virtual
@@ -73,7 +73,7 @@ Para que el agente pueda leer y crear eventos en Google Calendar, necesitas conf
 #### Paso 1: Crear proyecto en Google Cloud Console
 
 1. Ve a [Google Cloud Console](https://console.cloud.google.com/)
-2. Crea un nuevo proyecto (ej: "mock_ai Agent Demo")
+2. Crea un nuevo proyecto (ej: "Scheduling Agent Demo")
 3. Selecciona el proyecto
 
 #### Paso 2: Habilitar Google Calendar API
@@ -87,7 +87,7 @@ Para que el agente pueda leer y crear eventos en Google Calendar, necesitas conf
 1. Ve a **APIs & Services** → **OAuth consent screen**
 2. Selecciona **External** (o Internal si usas Google Workspace)
 3. Completa los campos requeridos:
-   - **App name**: mock_ai Agent Demo
+   - **App name**: Scheduling Agent Demo
    - **User support email**: tu email
    - **Developer contact**: tu email
 4. Click **Save and Continue**
@@ -102,11 +102,11 @@ Para que el agente pueda leer y crear eventos en Google Calendar, necesitas conf
 1. Ve a **APIs & Services** → **Credentials**
 2. Click **+ CREATE CREDENTIALS** → **OAuth client ID**
 3. Selecciona **Desktop app**
-4. Nombre: "mock_ai Agent Desktop"
+4. Nombre: "Scheduling Agent Desktop"
 5. Click **Create**
 6. Descarga el JSON (botón de descarga)
 7. Renombra el archivo a `google_credentials.json`
-8. Muévelo a `mock_ai-agent/config/google_credentials.json`
+8. Muévelo a `scheduling-agent/config/google_credentials.json`
 
 ---
 
@@ -143,7 +143,7 @@ python scripts/local_setup.py
 
 Esto crea:
 
-- Base de datos SQLite en `data/mock_ai.db`
+- Base de datos SQLite en `data/agent.db`
 - Configuración del sistema (modelo, temperatura, etc.)
 - 1 Cliente (Clínicas Salud Total)
 - 2 Sucursales
@@ -189,17 +189,17 @@ Este script elimina los recursos creados por `local_setup.py`:
 
 1. Lee los `google_calendar_id` de la base de datos
 2. Elimina cada calendario de Google Calendar
-3. Elimina el archivo `data/mock_ai.db`
+3. Elimina el archivo `data/agent.db`
 
 ---
 
-### Configurar Eventos "mock_ai" de Disponibilidad
+### Configurar Eventos de Disponibilidad
 
-El agente determina cuándo un empleado está disponible buscando eventos llamados **"mock_ai"** en su calendario.
+El agente determina cuándo un empleado está disponible buscando eventos marcadores en su calendario. El nombre del marcador se configura via la variable de entorno `AGENT_NAME` (default: "Assistant").
 
-#### Crear eventos "mock_ai" para cada calendario
+#### Crear eventos marcadores para cada calendario
 
-Para cada calendario, crea eventos recurrentes llamados **"mock_ai"** según los horarios:
+Para cada calendario, crea eventos recurrentes con el nombre del marcador según los horarios:
 
 #### Sucursal 1: Clínica Centro
 
@@ -222,11 +222,11 @@ Para cada calendario, crea eventos recurrentes llamados **"mock_ai"** según los
 | Dra. Ana Martínez  | Lun-Vie | 9:00-16:00  |
 | Dr. Javier Paredes | Lun-Vie | 13:00-18:00 |
 
-#### Cómo crear un evento recurrente "mock_ai"
+#### Cómo crear un evento recurrente de disponibilidad
 
 1. En Google Calendar, selecciona el calendario del empleado
 2. Click en una fecha/hora para crear evento
-3. **Título**: `mock_ai` (exactamente así, en minúsculas)
+3. **Título**: El valor de `AGENT_NAME` en minúsculas (ej: `assistant`)
 4. **Hora inicio/fin**: Según tabla
 5. Click en **More options** → **Does not repeat** → **Custom...**
 6. Selecciona los días de la semana correspondientes
@@ -252,10 +252,13 @@ OPENAI_API_KEY=sk-tu-api-key-aqui
 # Google Calendar
 GOOGLE_CALENDAR_CREDENTIALS_PATH=./config/google_credentials.json
 
+# Agent name (usado como marcador en Google Calendar)
+AGENT_NAME=Assistant
+
 # LangSmith (opcional, para tracing)
 LANGSMITH_API_KEY=lsv2_tu-api-key
 LANGSMITH_TRACING_V2=true
-LANGSMITH_PROJECT=mock_ai-agent
+LANGSMITH_PROJECT=scheduling-agent
 
 # Modelos alternativos (opcional)
 ANTHROPIC_API_KEY=sk-ant-tu-api-key
@@ -309,13 +312,13 @@ El proyecto sigue el patrón **Repository Pattern** con **Dependency Injection**
 ### Estructura del Proyecto
 
 ```
-mock_ai-agent/
+scheduling-agent/
 ├── config/                      # Credenciales
 │   ├── google_credentials.json  # Credenciales de Google (tú lo creas)
 │   └── token.json               # Token OAuth (auto-generado)
 │
 ├── data/                        # Base de datos
-│   └── mock_ai.db               # SQLite (auto-generado)
+│   └── agent.db                 # SQLite (auto-generado)
 │
 ├── scripts/                     # Scripts de desarrollo
 │   ├── local_setup.py           # Setup unificado (seed + calendars)

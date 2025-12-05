@@ -1,4 +1,4 @@
-# Arquitectura Técnica - mock_ai Agent
+# Arquitectura Técnica - Scheduling Agent
 
 Documentación técnica detallada del agente de agendación de citas basado en LangGraph.
 
@@ -68,7 +68,7 @@ Los tool_calls y tool_messages son **efímeros** - solo existen durante la ejecu
 ```
 src/
 ├── agent.py              # Grafo principal de LangGraph
-├── state.py              # Definiciones de estado (InputState, MockAiState)
+├── state.py              # Definiciones de estado (InputState, AgentState)
 ├── prompts.py            # System prompts del agente
 ├── container.py          # Dependency Injection Container
 │
@@ -334,12 +334,12 @@ class InputState(BaseModel):
     to_number: str = ""     # Teléfono del negocio (WhatsApp)
 ```
 
-### MockAiState
+### AgentState
 
 Estado completo que fluye por el grafo:
 
 ```python
-class MockAiState(BaseModel):
+class AgentState(BaseModel):
     # Mensajes
     messages: Annotated[Sequence[AnyMessage], replace_or_add_messages]
 
@@ -536,19 +536,19 @@ class ConfigDefaults:
 
 ### Concepto de Disponibilidad
 
-La disponibilidad de cada empleado se determina por **eventos llamados "mock_ai"** en su Google Calendar.
+La disponibilidad de cada empleado se determina por **eventos marcadores** en su Google Calendar. El nombre del marcador se configura via la variable de entorno `AGENT_NAME` (default: "Assistant").
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │  Calendario: Dr. Mario Gómez                                │
 ├─────────────────────────────────────────────────────────────┤
 │  8:00  ┌─────────────────┐                                  │
-│        │     mock_ai     │  ← Empleado disponible           │
+│        │    [marker]     │  ← Empleado disponible           │
 │        │   (disponible)  │                                  │
 │  12:00 ├─────────────────┤                                  │
 │        │   Almuerzo      │  ← Bloque ocupado                │
 │  13:00 ├─────────────────┤                                  │
-│        │     mock_ai     │  ← Empleado disponible           │
+│        │    [marker]     │  ← Empleado disponible           │
 │        │   (disponible)  │                                  │
 │  16:00 └─────────────────┘                                  │
 └─────────────────────────────────────────────────────────────┘
@@ -570,7 +570,7 @@ get_available_slots(branch_id, service, date)
 ┌─────────────────────────────────┐
 │  Google Calendar API            │
 │  ─────────────────────────────  │
-│  • Buscar eventos "mock_ai"     │
+│  • Buscar eventos marcadores    │
 │  • Buscar eventos ocupados      │
 └─────────────────────────────────┘
          │
@@ -578,24 +578,24 @@ get_available_slots(branch_id, service, date)
 ┌─────────────────────────────────┐
 │  Calcular slots disponibles     │
 │  ─────────────────────────────  │
-│  bloques_mock_ai - ocupados     │
+│  bloques_marcador - ocupados    │
 │  = slots libres                 │
 └─────────────────────────────────┘
 ```
 
-### Comportamiento sin eventos "mock_ai"
+### Comportamiento sin eventos marcadores
 
-Si un calendario **no tiene eventos "mock_ai"** para una fecha:
+Si un calendario **no tiene eventos marcadores** para una fecha:
 
 - El empleado se considera **NO disponible** para ese día
 - Se retorna lista vacía de slots
 - **NO se usa fallback** a horarios por defecto
 
 ```python
-availability_blocks = client.get_mock_ai_availability(google_calendar_id, target_date)
+availability_blocks = client.get_availability_blocks(google_calendar_id, target_date)
 
 if not availability_blocks:
-    # Sin eventos mock_ai = no disponible
+    # Sin eventos marcadores = no disponible
     return []
 ```
 
@@ -875,39 +875,39 @@ response = result["messages"][-1].content
 
 ```
 Usuario: Hola
-mock_ai: ¡Hola! Soy MockAi, el asistente virtual de Clínicas Salud Total.
+Agent: ¡Hola! Soy el asistente virtual de Clínicas Salud Total.
        Para poder ayudarte, ¿podrías indicarme tu nombre completo y número de cédula?
 
 Usuario: Luis Berrezueta, 0105392435
-mock_ai: Gracias Luis. ¿En qué puedo ayudarte hoy?
+Agent: Gracias Luis. ¿En qué puedo ayudarte hoy?
 
 Usuario: Necesito una cita
-mock_ai: Contamos con 2 sucursales:
+Agent: Contamos con 2 sucursales:
        1. Clínica Centro (Av. 10 de Agosto) - Medicina General, Pediatría, Cardiología
        2. Clínica Norte (Av. de la Prensa) - Servicios Dentales, Dermatología
        ¿En cuál te gustaría atenderte?
 
 Usuario: Centro
-mock_ai: En Clínica Centro tenemos:
+Agent: En Clínica Centro tenemos:
        - Consultas Generales
        - Pediatría
        - Cardiología
        ¿Qué tipo de servicio necesitas?
 
 Usuario: Consulta general
-mock_ai: Para Consulta General ($20, 30 min) tenemos disponibles:
+Agent: Para Consulta General ($20, 30 min) tenemos disponibles:
        - Dr. Mario Gómez (8:00-16:00)
        - Dra. Laura Rodríguez (10:00-18:00)
        ¿Tienes preferencia de doctor o te muestro disponibilidad?
 
 Usuario: Disponibilidad para mañana
-mock_ai: Disponibilidad para mañana:
+Agent: Disponibilidad para mañana:
        Dr. Mario Gómez: 8:00, 8:30, 9:00, 9:30, 10:00...
        Dra. Laura Rodríguez: 10:00, 10:30, 11:00...
        ¿Cuál prefieres?
 
 Usuario: 10:00 con Mario
-mock_ai: ¡Perfecto! Tu cita ha sido confirmada:
+Agent: ¡Perfecto! Tu cita ha sido confirmada:
        📅 Consulta General
        👨‍⚕️ Dr. Mario Gómez
        📍 Clínica Centro

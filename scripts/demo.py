@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Demo Interactiva - Agente mock_ai
+Demo Interactiva - Scheduling Agent
 
 Este script permite probar el agente de forma interactiva por consola.
 
@@ -45,7 +45,7 @@ def get_client_info():
 
 def print_header():
     print("=" * 70)
-    print("  MOCK_AI AGENT - Demo Interactiva")
+    print("  SCHEDULING AGENT - Demo Interactiva")
     print("=" * 70)
     print()
 
@@ -177,7 +177,7 @@ def run_demo():
                 thread_id=thread_id,
             )
 
-            print(f"\n🤖 mock_ai: {response}")
+            print(f"\n🤖 Agent: {response}")
 
         except Exception as e:
             print(f"\n❌ Error: {e}")

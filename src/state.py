@@ -1,5 +1,5 @@
 """
-State definitions for the mock_ai agent graph.
+State definitions for the agent graph.
 
 The agent is stateless - the database is the single source of truth.
 Each graph invocation receives a new user message, loads context from DB,
@@ -51,7 +51,7 @@ class InputState(BaseModel):
         arbitrary_types_allowed = True
 
 
-class MockAiState(BaseModel):
+class AgentState(BaseModel):
     """Full agent state - populated in load_context with data from DB."""
 
     messages: Annotated[Sequence[AnyMessage], replace_or_add_messages] = Field(
@@ -94,7 +94,9 @@ class ConversationConfig(BaseModel):
     client_id: str = Field(..., description="Client/business ID")
     user_phone: str = Field(..., description="User's WhatsApp number")
     branch_id: Optional[str] = Field(default=None)
-    conversation_timeout_hours: int = Field(default=int(ConfigDefaults.CONVERSATION_TIMEOUT_HOURS))
+    conversation_timeout_hours: int = Field(
+        default=int(ConfigDefaults.CONVERSATION_TIMEOUT_HOURS)
+    )
     model_name: Optional[str] = Field(default=None, description="Model override")
 
     class Config:

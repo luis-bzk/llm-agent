@@ -13,11 +13,12 @@ from langchain_core.runnables import RunnableConfig
 from langgraph.graph import StateGraph, START, END
 from langgraph.prebuilt import ToolNode
 
-from .state import MockAiState, InputState
+from .state import AgentState, InputState
 from .prompts import get_system_prompt
 from .container import get_container
 from .domain.message import Message
 from .config import logger as log
+from .config.env import get_agent_name
 from .constants.config_keys import ConfigKeys, ConfigDefaults
 from .tools.services import get_services, get_categories, get_service_details
 from .tools.availability import get_available_slots
@@ -335,7 +336,7 @@ def assistant(state, config: RunnableConfig) -> dict:
     user_phone = get_state_value(state, "user_phone", "")
 
     business_name = "Business"
-    bot_name = "mock_ai"
+    bot_name = get_agent_name().lower()
     greeting_message = None
     branch_info = None
     has_multiple_branches = False
@@ -547,7 +548,7 @@ def build_graph():
     Returns:
         StateGraph: Configured graph ready to compile.
     """
-    builder = StateGraph(MockAiState, input=InputState)
+    builder = StateGraph(AgentState, input=InputState)
 
     builder.add_node("load_context", load_context)
     builder.add_node("assistant", assistant)

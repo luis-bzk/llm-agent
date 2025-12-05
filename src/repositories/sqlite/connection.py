@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Optional
 
 
-DEFAULT_DB_PATH = Path(__file__).parent.parent.parent.parent / "data" / "mock_ai.db"
+DEFAULT_DB_PATH = Path(__file__).parent.parent.parent.parent / "data" / "agent.db"
 
 
 def adapt_date(val: date) -> str:

@@ -1,14 +1,15 @@
 """Google Calendar Integration.
 
-This integration looks for "mock_ai" events in the calendar to determine availability.
-"mock_ai" events mark time blocks where the employee is available.
+This integration looks for availability marker events in the calendar.
+The marker name is configured via the AGENT_NAME environment variable.
 
 Example:
-- "mock_ai" event from 9:00 to 17:00 = employee available from 9 to 17
+- Marker event from 9:00 to 17:00 = employee available from 9 to 17
 - Any other event in that range = booked time
 """
 
 import os
+from ..config.env import get_agent_name
 from datetime import datetime, date, time, timedelta
 from typing import Optional
 from pathlib import Path
@@ -78,10 +79,10 @@ class GoogleCalendarClient:
 
         self.service = build("calendar", "v3", credentials=creds)
 
-    def get_mock_ai_availability(
+    def get_availability_blocks(
         self, calendar_id: str, target_date: date
     ) -> list[tuple[time, time]]:
-        """Gets availability blocks based on "mock_ai" events.
+        """Gets availability blocks based on marker events.
 
         Args:
             calendar_id: Google Calendar ID.
@@ -90,11 +91,19 @@ class GoogleCalendarClient:
         Returns:
             List of (start_time, end_time) tuples where availability exists.
         """
+        marker_name = get_agent_name().lower()
+
         try:
             start_datetime = datetime.combine(target_date, time(0, 0))
             end_datetime = datetime.combine(target_date, time(23, 59, 59))
 
-            log.debug("gcal", "Searching calendar", calendar_id=calendar_id, date_range=f"{start_datetime} to {end_datetime}")
+            log.debug(
+                "gcal",
+                "Searching calendar",
+                calendar_id=calendar_id,
+                date_range=f"{start_datetime} to {end_datetime}",
+                marker=marker_name,
+            )
 
             events_result = (
                 self.service.events()
@@ -104,21 +113,27 @@ class GoogleCalendarClient:
                     timeMax=end_datetime.isoformat() + "Z",
                     singleEvents=True,
                     orderBy="startTime",
-                    q="mock_ai",
+                    q=marker_name,
                 )
                 .execute()
             )
 
-            mock_ai_events = events_result.get("items", [])
-            log.debug("gcal", f"Found {len(mock_ai_events)} mock_ai events")
+            marker_events = events_result.get("items", [])
+            log.debug("gcal", f"Found {len(marker_events)} marker events")
 
-            for event in mock_ai_events:
-                log.debug("gcal", "Event found", summary=event.get('summary'), start=event['start'], end=event['end'])
+            for event in marker_events:
+                log.debug(
+                    "gcal",
+                    "Event found",
+                    summary=event.get("summary"),
+                    start=event["start"],
+                    end=event["end"],
+                )
 
             availability_blocks = []
-            for event in mock_ai_events:
+            for event in marker_events:
                 summary = event.get("summary", "").lower()
-                if "mock_ai" in summary:
+                if marker_name in summary:
                     start = event["start"].get("dateTime", event["start"].get("date"))
                     end = event["end"].get("dateTime", event["end"].get("date"))
 
@@ -126,7 +141,12 @@ class GoogleCalendarClient:
                     end_dt = datetime.fromisoformat(end.replace("Z", "+00:00"))
 
                     availability_blocks.append((start_dt.time(), end_dt.time()))
-                    log.debug("gcal", "Added availability block", start=start_dt.time(), end=end_dt.time())
+                    log.debug(
+                        "gcal",
+                        "Added availability block",
+                        start=start_dt.time(),
+                        end=end_dt.time(),
+                    )
 
             return availability_blocks
 
@@ -135,18 +155,20 @@ class GoogleCalendarClient:
             return []
 
     def get_booked_slots(
-        self, calendar_id: str, target_date: date, exclude_mock_ai: bool = True
+        self, calendar_id: str, target_date: date, exclude_marker: bool = True
     ) -> list[tuple[time, time]]:
-        """Gets already booked slots (events that are NOT "mock_ai").
+        """Gets already booked slots (events that are NOT availability markers).
 
         Args:
             calendar_id: Calendar ID.
             target_date: Date to check.
-            exclude_mock_ai: Whether to exclude "mock_ai" events (default True).
+            exclude_marker: Whether to exclude availability marker events (default True).
 
         Returns:
             List of (start_time, end_time) tuples for booked slots.
         """
+        marker_name = get_agent_name().lower()
+
         try:
             start_datetime = datetime.combine(target_date, time(0, 0))
             end_datetime = datetime.combine(target_date, time(23, 59, 59))
@@ -169,7 +191,7 @@ class GoogleCalendarClient:
             for event in all_events:
                 summary = event.get("summary", "").lower()
 
-                if exclude_mock_ai and "mock_ai" in summary:
+                if exclude_marker and marker_name in summary:
                     continue
 
                 start = event["start"].get("dateTime", event["start"].get("date"))
@@ -283,14 +305,20 @@ def calculate_available_slots(
     at 09:00, 09:40, 10:20, etc.
 
     Args:
-        availability_blocks: Blocks where availability exists (from "mock_ai" events).
+        availability_blocks: Blocks where availability exists (from marker events).
         booked_slots: Already booked slots.
         duration_minutes: Service duration (also used as slot interval).
 
     Returns:
         List of available start times.
     """
-    log.debug("slots", "calculate_available_slots", availability_blocks=availability_blocks, booked_slots=booked_slots, duration_minutes=duration_minutes)
+    log.debug(
+        "slots",
+        "calculate_available_slots",
+        availability_blocks=availability_blocks,
+        booked_slots=booked_slots,
+        duration_minutes=duration_minutes,
+    )
 
     available_slots = []
 
@@ -298,7 +326,14 @@ def calculate_available_slots(
         avail_start_mins = avail_start.hour * 60 + avail_start.minute
         avail_end_mins = avail_end.hour * 60 + avail_end.minute
 
-        log.debug("slots", "Processing block", start=avail_start, end=avail_end, start_mins=avail_start_mins, end_mins=avail_end_mins)
+        log.debug(
+            "slots",
+            "Processing block",
+            start=avail_start,
+            end=avail_end,
+            start_mins=avail_start_mins,
+            end_mins=avail_end_mins,
+        )
 
         current_mins = avail_start_mins
         slots_in_block = []
@@ -326,7 +361,11 @@ def calculate_available_slots(
             # Use service duration as interval to prevent overlapping appointments
             current_mins += duration_minutes
 
-        log.debug("slots", f"Generated {len(slots_in_block)} slots in block", sample=slots_in_block[:5])
+        log.debug(
+            "slots",
+            f"Generated {len(slots_in_block)} slots in block",
+            sample=slots_in_block[:5],
+        )
 
     log.debug("slots", f"Total slots generated: {len(available_slots)}")
     return available_slots

@@ -1,4 +1,4 @@
-"""Centralized logger for mock_ai agent."""
+"""Centralized logger for the scheduling agent."""
 
 import os
 from datetime import datetime

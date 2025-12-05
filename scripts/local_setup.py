@@ -20,7 +20,7 @@ from pathlib import Path
 
 # Paths
 SCRIPT_DIR = Path(__file__).parent.parent
-DB_PATH = SCRIPT_DIR / "data" / "mock_ai.db"
+DB_PATH = SCRIPT_DIR / "data" / "agent.db"
 CREDENTIALS_PATH = SCRIPT_DIR / "config" / "google_credentials.json"
 TOKEN_PATH = SCRIPT_DIR / "config" / "token.json"
 
@@ -196,8 +196,8 @@ def seed_demo_data(cursor: sqlite3.Cursor) -> str:
             15,
             500,
             30,
-            "MockAi",
-            "¡Hola! Soy MockAi, el asistente virtual de Clínicas Salud Total. ¿En qué puedo ayudarte hoy?",
+            "AiBot",
+            "¡Hola! Soy AiBot, el asistente virtual de Clínicas Salud Total. ¿En qué puedo ayudarte hoy?",
             "+593912345678",
             "presencial",  # appointment_type: presencial or virtual
             now,
@@ -562,16 +562,19 @@ def setup_google_calendars(cursor: sqlite3.Cursor):
 
     print(f"\n   Created: {created}, Skipped: {skipped}")
 
-    # After creating calendars, create mock_ai events
-    create_mock_ai_events(cursor, service)
+    # After creating calendars, create availability marker events
+    create_availability_events(cursor, service)
 
 
-def create_mock_ai_events(cursor: sqlite3.Cursor, service):
-    """Creates recurring 'mock_ai' availability events for all calendars."""
+def create_availability_events(cursor: sqlite3.Cursor, service):
+    """Creates recurring availability marker events for all calendars."""
+    import os
     from googleapiclient.errors import HttpError
 
+    marker_name = os.getenv("AGENT_NAME", "Assistant").lower()
+
     print("\n" + "=" * 70)
-    print("CREATING MOCK_AI AVAILABILITY EVENTS")
+    print("CREATING AVAILABILITY MARKER EVENTS")
     print("=" * 70)
 
     # Get calendars with their schedule info
@@ -615,27 +618,27 @@ def create_mock_ai_events(cursor: sqlite3.Cursor, service):
             skipped += 1
             continue
 
-        # Check if mock_ai event already exists
+        # Check if marker event already exists
         try:
             events = (
                 service.events()
                 .list(
                     calendarId=google_calendar_id,
-                    q="mock_ai",
+                    q=marker_name,
                     maxResults=1,
                 )
                 .execute()
             )
 
             if events.get("items"):
-                print(f"   ⏭️  {cal['name']} - mock_ai event exists")
+                print(f"   ⏭️  {cal['name']} - marker event exists")
                 skipped += 1
                 continue
         except HttpError as e:
             print(f"   ✗ {cal['name']} - error checking: {e}")
             continue
 
-        # Create recurring mock_ai event
+        # Create recurring marker event
         start_time = employee_config["start_time"]
         end_time = employee_config["end_time"]
         working_days = employee_config["working_days"]
@@ -651,7 +654,7 @@ def create_mock_ai_events(cursor: sqlite3.Cursor, service):
         end_datetime = datetime.combine(next_monday, end_time)
 
         event_body = {
-            "summary": "mock_ai",
+            "summary": marker_name,
             "description": f"Disponibilidad de {cal['name']} para citas",
             "start": {
                 "dateTime": start_datetime.isoformat(),
@@ -691,7 +694,7 @@ def main():
     args = parser.parse_args()
 
     print("=" * 70)
-    print("LOCAL SETUP - mock_ai Agent")
+    print("LOCAL SETUP - Scheduling Agent")
     print("=" * 70)
 
     conn = get_connection()

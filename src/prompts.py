@@ -1,5 +1,5 @@
 """
-System Prompts para el Agente mock_ai
+System Prompts for the scheduling agent.
 """
 
 from datetime import date
